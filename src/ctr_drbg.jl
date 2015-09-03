@@ -27,8 +27,8 @@ end
 
 seed!(rng::CtrDrbg, entropy) = seed!(rng, entropy, UInt8[])
 
-function Base.rand!(rng::CtrDrbg, buf)
-    @err_check call((:mbedtls_ctr_drbg_random, MBED_CRYPTO), Cint,
+function Base.rand!(rng::CtrDrbg, buf::Array)
+    @err_check ccall((:mbedtls_ctr_drbg_random, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t),
         rng.data, buf, sizeof(buf))
     buf
