@@ -1,10 +1,11 @@
-headers = filter(x->splitext(x)[2]==".h", readdir("/Users/malmaud/mbedtls/include/mbedtls"))
+include_dir = "/usr/local/include/mbedtls"
+headers = filter(x->splitext(x)[2]==".h", readdir(include_dir))
 r=r"#define (\w+)\s+(-?(0x)?[\dA-F]+)"
 
 c = Dict{ASCIIString, Int}()
 
 for header in headers
-    s=readall(joinpath("/Users/malmaud/mbedtls/include/mbedtls", header))
+    s=readall(joinpath(include_dir, header))
     for m in eachmatch(r, s)
         c[m.captures[1]] = eval(parse(m.captures[2]))
     end

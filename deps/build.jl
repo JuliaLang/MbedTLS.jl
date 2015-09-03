@@ -3,10 +3,12 @@ using BinDeps
 @BinDeps.setup
 
 mbed = library_dependency("libmbedtls", aliases=["libmbedtls", "libmbedtls.2.0.0"])
+mbed_crypto = library_dependency("libmbedcrypto", aliases=["libmbedcrypto", "libmbedcrypto.2.0.0"])
+mbed_x509 = library_dependency("libmbedx509", aliases=["libmbedx509", "libmbedx509.2.0.0"])
 
 provides(Sources,
         URI("https://tls.mbed.org/download/mbedtls-2.0.0-gpl.tgz"),
-        mbed, unpacked_dir="mbedtls-2.0.0")
+        [mbed, mbed_crypto, mbed_x509], unpacked_dir="mbedtls-2.0.0")
 
 mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.0.0")
 
@@ -20,7 +22,9 @@ provides(BuildProcess,
                 `make`
             end
         end
-    end), mbed, installed_libpath=joinpath(mbed_dir, "library"))
+    end), [mbed, mbed_crypto, mbed_x509], installed_libpath=joinpath(mbed_dir, "library"))
 
 
-@BinDeps.install Dict("libmbedtls"=>"MBED_TLS")
+@BinDeps.install Dict("libmbedtls"=>"MBED_TLS",
+                      "libmbedcrypto"=>"MBED_CRYPTO",
+                      "libmbedx509"=>"MBED_X509")

@@ -1,15 +1,11 @@
-__precompile__(false)
+__precompile__(true)
 module Mbed
 
 using BinDeps
 
-@BinDeps.load_dependencies
-
 import Base: show
 
-const MBED_TLS = "/usr/local/lib/libmbedtls.dylib"
-const MBED_CRYPTO = "/usr/local/lib/libmbedcrypto.dylib"
-const MBED_X509 = "/usr/local/lib/libmbedx509.dylib"
+include(joinpath(dirname(@__FILE__), "../deps/deps.jl"))
 
 include("constants.jl")
 include("error.jl")

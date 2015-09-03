@@ -19,20 +19,18 @@ end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
     entropy_func = cglobal((:mbedtls_entropy_func, MBED_CRYPTO))
-    ret = ccall((:mbedtls_ctr_drbg_seed, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_ctr_drbg_seed, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Void}, Csize_t),
-        rng.data, entropy_func, entropy.data, pdata, sizeof(pdata))
-    ret == 0 || mbed_err(ret)
+        rng.data, entropy_func, entropy.data, pdata, sizeof(pdata))    
     rng
 end
 
 seed!(rng::CtrDrbg, entropy) = seed!(rng, entropy, UInt8[])
 
 function Base.rand!(rng::CtrDrbg, buf)
-    ret = ccall((:mbedtls_ctr_drbg_random, MBED_CRYPTO), Cint,
+    @err_check call((:mbedtls_ctr_drbg_random, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t),
         rng.data, buf, sizeof(buf))
-    ret == 0 || mbed_err(ret)
     buf
 end
 
