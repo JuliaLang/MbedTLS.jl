@@ -3,7 +3,11 @@ module MbedTLS
 
 import Base: show
 
-include(joinpath(dirname(@__FILE__), "../deps/deps.jl"))
+if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
+    include(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
+else
+    error("MbedTLS not properly installed. Please run Pkg.build(\"MbedTLS\")")
+end
 
 include("constants.jl")
 include("error.jl")
