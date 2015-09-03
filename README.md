@@ -1,4 +1,4 @@
-# Mbed
+# MbedTLS
 
 [![Build Status](https://travis-ci.org/malmaud/Mbed.jl.svg?branch=master)](https://travis-ci.org/malmaud/Mbed.jl)
 
@@ -8,29 +8,29 @@ Usage:
 
 ```julia
 sock = connect("httpbin.org", 443)
-entropy = Mbed.Entropy()
-rng = Mbed.CtrDrbg()
-Mbed.seed!(rng, entropy)
+entropy = MbedTLS.Entropy()
+rng = MbedTLS.CtrDrbg()
+MbedTLS.seed!(rng, entropy)
 
-ctx = Mbed.SSLContext()
-conf = Mbed.SSLConfig()
+ctx = MbedTLS.SSLContext()
+conf = MbedTLS.SSLConfig()
 
-Mbed.config_defaults!(conf)
-Mbed.authmode!(conf, Mbed.MBEDTLS_SSL_VERIFY_REQUIRED)
-Mbed.rng!(conf, rng)
+MbedTLS.config_defaults!(conf)
+MbedTLS.authmode!(conf, MbedTLS.MBEDTLS_SSL_VERIFY_REQUIRED)
+MbedTLS.rng!(conf, rng)
 
 function show_debug(level, filename, number, msg)
     @show level, filename, number, msg
 end
 
-Mbed.dbg!(conf, show_debug)
+MbedTLS.dbg!(conf, show_debug)
 
-Mbed.ca_chain!(conf)
+MbedTLS.ca_chain!(conf)
 
-Mbed.setup!(ctx, conf)
-Mbed.set_bio!(ctx, sock)
+MbedTLS.setup!(ctx, conf)
+MbedTLS.set_bio!(ctx, sock)
 
-Mbed.handshake(ctx)
+MbedTLS.handshake(ctx)
 
 write(ctx, "GET / HTTP/1.1\r\nHost: httpbin.org\r\n\r\n")
 buf = bytestring(readbytes(ctx, 100))

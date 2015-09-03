@@ -1,7 +1,5 @@
 __precompile__(true)
-module Mbed
-
-using BinDeps
+module MbedTLS
 
 import Base: show
 

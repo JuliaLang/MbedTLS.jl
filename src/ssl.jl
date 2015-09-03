@@ -6,7 +6,7 @@ type SSLConfig
 
     function SSLConfig()
         conf = new()
-        conf.data = Libc.malloc(1000)
+        conf.data = Libc.malloc(1000)  # 360
         ccall((:mbedtls_ssl_config_init, MBED_TLS), Void, (Ptr{Void},), conf.data)
         finalizer(conf, conf->begin
             ccall((:mbedtls_ssl_config_free, MBED_TLS), Void, (Ptr{Void},), conf.data)
@@ -24,7 +24,7 @@ type SSLContext <: IO
 
     function SSLContext()
         ctx = new()
-        ctx.data = Libc.malloc(1000)
+        ctx.data = Libc.malloc(1000)  # 488
         ccall((:mbedtls_ssl_init, MBED_TLS), Void, (Ptr{Void},), ctx.data)
         finalizer(ctx, ctx->begin
             ccall((:mbedtls_ssl_free, MBED_TLS), Void, (Ptr{Void},), ctx.data)
