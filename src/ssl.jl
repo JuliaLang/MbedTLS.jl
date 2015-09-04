@@ -1,6 +1,6 @@
 type SSLConfig
     data::Ptr{Void}
-    rng::CtrDrbg
+    rng
     chain::CRT
     dbg
 
@@ -54,10 +54,9 @@ function rng!(config::SSLConfig, f_rng::Ptr{Void}, ctx)
         config.data, f_rng, ctx)
 end
 
-function rng!(config::SSLConfig, rng::CtrDrbg)
+function rng!(config::SSLConfig, rng::AbstractRNG)
     config.rng = rng
-    f_random = cglobal((:mbedtls_ctr_drbg_random, MBED_CRYPTO))
-    rng!(config, f_random, rng.data)
+    rng!(config, c_rng, pointer_from_objref(rng))
 end
 
 function ca_chain!(config::SSLConfig, chain=crt_parse_file(TRUSTED_CERT_FILE))

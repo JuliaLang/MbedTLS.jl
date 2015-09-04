@@ -1,4 +1,4 @@
-type CtrDrbg
+type CtrDrbg  <: AbstractRNG
     data::Ptr{Void}
 
     function CtrDrbg()
@@ -15,6 +15,13 @@ type CtrDrbg
 
 
     CrtDrbg(data) = new(data)
+end
+
+function f_rng(c_ctx, c_buf, sz)
+    jl_ctx = unsafe_pointer_to_objref(c_ctx)
+    jl_buf = pointer_to_array(c_buf, sz, false)
+    rand!(jl_ctx, jl_buf)
+    MBED_SUCCESS
 end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
@@ -37,4 +44,8 @@ end
 function Base.rand(rng::CtrDrbg, size)
     buf = Vector{UInt8}(size)
     rand!(rng, buf)
+end
+
+function __ctr_drbg__init__()
+    const global c_rng=cfunction(f_rng, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
 end

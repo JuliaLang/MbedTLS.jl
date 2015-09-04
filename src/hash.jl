@@ -1,5 +1,12 @@
 abstract MbedHash
 
+#  Message digest constants from mbedtls_md_type_t enum in md.h
+const MBEDTLS_MD_NONE=0
+const MBEDTLS_MD_MD2=1
+const MBEDTLS_MD_MD4=2
+const MBEDTLS_MD_MD5=3
+const MBEDTLS_MD_SHA1=4
+
 macro define_hash(typename, abbr, sz, digest_sz)
     start_sym = Symbol("mbedtls_$(abbr)_starts")
     init_sym = Symbol("mbedtls_$(abbr)_init")
