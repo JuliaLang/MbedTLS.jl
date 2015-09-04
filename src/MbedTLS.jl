@@ -11,6 +11,7 @@ end
 
 include("constants.jl")
 include("error.jl")
+include("hash.jl")
 include("entropy.jl")
 include("ctr_drbg.jl")
 include("x509_crt.jl")

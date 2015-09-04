@@ -20,3 +20,5 @@ The Mbed.jl package is licensed under the MIT "Expat" License:
 > CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 > TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 > SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Pursuant to the [ARM mbed FOSS License Exception](https://tls.mbed.org/foss-license-exception), the distribution of libmbedtls, libmbedcrypto, and libmbedx509 ("mbedtls") that is installed as a consequence of installing this package is licensed under the same license as this package as a whole (the MIT "Expat" License). The source code of mbedtls may be downloaded in its entirety from https://tls.mbed.org/source-code. 

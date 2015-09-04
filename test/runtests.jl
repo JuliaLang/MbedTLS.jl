@@ -1,7 +1,19 @@
 using MbedTLS
 using Base.Test
 
-# Basic client functionality
+# Hashing
+let
+    @test hash(MbedTLS.SHA1, "test") ==
+      [169, 74, 143, 229, 204, 177, 155, 166, 28, 76, 8, 115, 211, 145, 233, 135, 152, 47, 187, 211]
+
+    ctx = MbedTLS.MD5()
+    write(ctx, UInt8[1, 2])
+    write(ctx, UInt8[3, 4])
+    @test MbedTLS.digest(ctx) ==
+      [8, 214, 192, 90, 33, 81, 42, 121, 161, 223, 235, 157, 42, 143, 38, 47]
+end
+
+# Basic TLS client functionality
 let
     sock = connect("httpbin.org", 443)
     entropy = MbedTLS.Entropy()

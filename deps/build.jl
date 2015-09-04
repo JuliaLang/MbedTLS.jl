@@ -39,7 +39,7 @@ end
 @windows_only begin
     provides(
         Binaries,
-        URI("https://malmaud.github.io/files/mbedtls-2.0.0.zip"),
+        URI("https://cache.e.ip.saba.us/https://malmaud.github.io/files/mbedtls-2.0.0.zip "),
         mbed_all)
 end
 
