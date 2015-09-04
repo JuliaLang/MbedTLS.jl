@@ -39,7 +39,7 @@ end
 @windows_only begin
     provides(
         Binaries,
-        URL("https://malmaud.github.io/files/libmedtls.2.0.0.zip"),
+        URI("https://malmaud.github.io/files/libmedtls.2.0.0.zip"),
         mbed_all)
 end
 
