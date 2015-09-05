@@ -9,7 +9,7 @@ mbed_x509 = library_dependency("libmbedx509", aliases=["libmbedx509", "libmbedx5
 mbed_all = [mbed, mbed_crypto, mbed_x509]
 
 provides(Sources,
-        URI("https://tls.mbed.org/download/start/mbedtls-2.1.0-apache.tgz"),
+        URI("https://tls.mbed.org/download/mbedtls-2.1.0-apache.tgz"),
         mbed_all, unpacked_dir="mbedtls-2.1.0")
 
 
@@ -41,7 +41,9 @@ end
     provides(
         Binaries,
         URI("https://cache.e.ip.saba.us/https://malmaud.github.io/files/mbedtls-2.1.0-r1.zip"),
-        mbed_all, unpacked_dir=unpacked_dir)
+        mbed_all,
+        unpacked_dir=unpacked_dir,
+        sha = "96a43f0ccad30ea5ce6c53f1d8420a305a7f953436c20b784f3392f9b08f57a5")
 end
 
 
