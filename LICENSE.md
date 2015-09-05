@@ -36,3 +36,7 @@ is licensed separately, as follows:
 > limitations under the License.
 
 The MbedTLS source code may be downloaded from https://tls.mbed.org/source-code.
+
+This package comes bundled with a registry of trusted certificate authorities provided by
+the Mozilla Corporation. It is subject to the terms of the Mozilla Public
+License, v. 2.0, which can be obtained at http://mozilla.org/MPL/2.0/.
