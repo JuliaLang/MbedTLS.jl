@@ -1,6 +1,6 @@
 # MbedTLS
 
-[![Build Status](https://travis-ci.org/malmaud/MbedTLS.jl.svg?branch=master)](https://travis-ci.org/malmaud/MbedTLS.jl)
+[![Build Status](https://travis-ci.org/JuliaWeb/MbedTLS.jl.svg?branch=master)](https://travis-ci.org/JuliaWeb/MbedTLS.jl)
 
 A wrapper around the [mbed](https://tls.mbed.org/) TLS and cryptography C libary.
 
