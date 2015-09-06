@@ -135,6 +135,14 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf)
     Int(n)
 end
 
+function Base.readavailable(ctx::SSLContext)
+    readbytes(ctx, nb_available(ctx))
+end
+
+for f in [:isopen, :close]
+    @eval Base.$f(ctx::SSLContext) = $f(ctx.bio)
+end
+
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, MBED_TLS), Ptr{Void}, (Ptr{Void},), ctx.data)
     CRT(data)
