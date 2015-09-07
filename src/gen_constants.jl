@@ -1,13 +1,13 @@
-include_dir = "/usr/local/include/mbedtls"
+include_dir = joinpath(homedir(), ".julia/v0.4/MbedTLS/deps/src/mbedtls-2.1.0/include/mbedtls")
 headers = filter(x->splitext(x)[2]==".h", readdir(include_dir))
 r=r"#define (\w+)\s+(-?(0x)?[\dA-F]+)"
 
-c = Dict{ASCIIString, Int}()
+c = Dict{ASCIIString, Cint}()
 
 for header in headers
     s=readall(joinpath(include_dir, header))
     for m in eachmatch(r, s)
-        c[m.captures[1]] = eval(parse(m.captures[2]))
+        c[m.captures[1]] = parse(Cint, m.captures[2])
     end
 end
 

@@ -9,7 +9,9 @@ immutable MbedException <: Exception
     ret::Cint
 end
 
-show(io::IO, err::MbedException) = println(io, strerror(err.ret))
+function show(io::IO, err::MbedException)
+    print(io, "MbedTLS error code $(err.ret): $(strerror(err.ret))")    
+end
 
 mbed_err(ret) = throw(MbedException(ret))
 

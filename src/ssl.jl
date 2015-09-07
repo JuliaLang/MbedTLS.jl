@@ -20,6 +20,7 @@ end
 type SSLContext <: IO
     data::Ptr{Void}
     config::SSLConfig
+    isopen::Bool
     bio
 
     function SSLContext()
@@ -117,31 +118,57 @@ end
 function handshake(ctx::SSLContext)
     @err_check ccall((:mbedtls_ssl_handshake, MBED_TLS), Cint,
         (Ptr{Void},), ctx.data)
+    ctx.isopen = true
 end
 
 function Base.write(ctx::SSLContext, msg::Vector{UInt8})
-    n = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t),
-        ctx.data, msg, sizeof(msg))
+    n = 0
+    N = length(msg)
+    while n < N
+        ret = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
+                    (Ptr{Void}, Ptr{Void}, Csize_t),
+                    ctx.data, pointer(msg, n+1), N-n)
+        ret<0 && mbed_err(ret)
+        n += ret
+    end
     Int(n)
 end
 
 function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf))
     n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t),
-        ctx.data, buf, nbytes)
+              (Ptr{Void}, Ptr{Void}, Csize_t),
+              ctx.data, buf, nbytes)
+    if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
+        ctx.isopen = false
+        return Int(0)
+    end
     n<0 && mbed_err(n)
     n < length(buf) && resize!(buf, n)
     Int(n)
 end
 
 function Base.readavailable(ctx::SSLContext)
-    readbytes(ctx, nb_available(ctx))
+    n = nb_available(ctx)
+    readbytes(ctx,n)
 end
 
-for f in [:isopen, :close]
-    @eval Base.$f(ctx::SSLContext) = $f(ctx.bio)
+function Base.eof(ctx::SSLContext)
+     nb_available(ctx)>0 && return false
+     eof(ctx.bio)
+ end
+
+function Base.close(ctx::SSLContext)
+    if isopen(ctx.bio)
+        try  # This is ugly, but a harmless broken pipe exception will be thrown if the peer closes the connection without responding
+            ccall((:mbedtls_ssl_close_notify, MBED_TLS), Cint, (Ptr{Void},), ctx.data)
+        catch
+        end
+        close(ctx.bio)
+    end
+    ctx.isopen = false
 end
+
+Base.isopen(ctx::SSLContext) = ctx.isopen && isopen(ctx.bio)
 
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, MBED_TLS), Ptr{Void}, (Ptr{Void},), ctx.data)
