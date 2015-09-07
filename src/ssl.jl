@@ -134,15 +134,27 @@ function Base.write(ctx::SSLContext, msg::Vector{UInt8})
     Int(n)
 end
 
-function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf))
+function ssl_read(ctx, buf, nbytes)
     n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
               (Ptr{Void}, Ptr{Void}, Csize_t),
               ctx.data, buf, nbytes)
-    if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
-        ctx.isopen = false
-        return Int(0)
+end
+
+function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf))
+    n = 0
+    while true
+        n = ssl_read(ctx, buf, nbytes)
+        if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
+            ctx.isopen = false
+            return 0
+        elseif n ==  MBEDTLS_ERR_SSL_WANT_READ
+            continue
+        elseif n < 0
+            mbed_err(n)
+        else
+            break
+        end
     end
-    n<0 && mbed_err(n)
     n < length(buf) && resize!(buf, n)
     Int(n)
 end
@@ -153,8 +165,11 @@ function Base.readavailable(ctx::SSLContext)
 end
 
 function Base.eof(ctx::SSLContext)
-     nb_available(ctx)>0 && return false
-     eof(ctx.bio)
+    # Not quite semantically correct, since nb_available might still be zero
+    # when this returns false (ie, the underlying socket has bytes available but not 
+    # a complete record)
+    nb_available(ctx)>0 && return false
+    eof(ctx.bio)
  end
 
 function Base.close(ctx::SSLContext)
