@@ -36,7 +36,7 @@ type SSLContext <: IO
     end
 end
 
-function config_defaults!(config::SSLConfig, endpoint=MBEDTLS_SSL_IS_CLIENT,
+function config_defaults!(config::SSLConfig; endpoint=MBEDTLS_SSL_IS_CLIENT,
     transport=MBEDTLS_SSL_TRANSPORT_STREAM, preset=MBEDTLS_SSL_PRESET_DEFAULT)
     @err_check ccall((:mbedtls_ssl_config_defaults, MBED_TLS), Cint,
         (Ptr{Void}, Cint, Cint, Cint),
@@ -65,6 +65,12 @@ function ca_chain!(config::SSLConfig, chain=crt_parse_file(TRUSTED_CERT_FILE))
     ccall((:mbedtls_ssl_conf_ca_chain, MBED_TLS), Void,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}),
         config.data, chain.data, C_NULL)
+end
+
+function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
+    @err_check ccall((:mbedtls_ssl_conf_own_cert, MBED_TLS), Cint,
+        (Ptr{Void}, Ptr{Void}, Ptr{Void}),
+        config.data, cert.data, key.data)
 end
 
 function setup!(ctx::SSLContext, conf::SSLConfig)
@@ -166,7 +172,7 @@ end
 
 function Base.eof(ctx::SSLContext)
     # Not quite semantically correct, since nb_available might still be zero
-    # when this returns false (ie, the underlying socket has bytes available but not 
+    # when this returns false (ie, the underlying socket has bytes available but not
     # a complete record)
     nb_available(ctx)>0 && return false
     eof(ctx.bio)

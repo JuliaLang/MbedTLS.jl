@@ -17,6 +17,7 @@ include("hash.jl")
 include("rsa.jl")
 include("entropy.jl")
 include("ctr_drbg.jl")
+include("pk.jl")
 include("x509_crt.jl")
 include("ssl.jl")
 
