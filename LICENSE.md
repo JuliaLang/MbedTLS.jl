@@ -22,7 +22,7 @@ The Mbed.jl package is licensed under the MIT "Expat" License:
 > SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 The MbedTLS library, which is installed as a consequence of installing this package,
-is licensed separately, as follows:
+is licensed separately, as follows (but also under the GPL):
 
 > Copyright (C) 2006-2015, ARM Limited, All Rights Reserved
 > SPDX-License-Identifier: Apache-2.0
