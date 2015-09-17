@@ -24,6 +24,7 @@ include("ssl.jl")
 function __init__()
     __ctr_drbg__init__()
     __sslinit__()
+    __entropyinit__()
 end
 
 end # module

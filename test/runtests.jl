@@ -17,6 +17,14 @@ end
 let
     sock = connect("httpbin.org", 443)
     entropy = MbedTLS.Entropy()
+
+    rng = RandomDevice()
+    function entropy_func(buf)
+        buf[:] = rand(rng, UInt8, length(buf))
+        return length(buf)
+    end
+
+    MbedTLS.add_source!(entropy, entropy_func, 0, true)
     rng = MbedTLS.CtrDrbg()
     MbedTLS.seed!(rng, entropy)
 
