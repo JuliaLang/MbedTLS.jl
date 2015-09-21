@@ -39,3 +39,13 @@ end
 function __entropyinit__()
     global const c_entropy = cfunction(jl_entropy, Cint, (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}))
 end
+
+function gather(ctx::Entropy)
+    @err_check ccall((:mbedtls_entropy_gather, MBED_CRYPTO), Cint,
+      (Ptr{Void},), ctx.data)
+end
+
+function update_manual(ctx::Entropy, data::Vector{UInt8})
+    @err_check ccall((:mbedtls_entropy_update_manual, MBED_CRYPTO), Cint,
+      (Ptr{Void}, Ptr{Void}, Csize_t), ctx.data, length(data))
+end
