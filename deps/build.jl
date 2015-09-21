@@ -8,10 +8,15 @@ mbed_x509 = library_dependency("libmbedx509", aliases=["libmbedx509", "libmbedx5
 
 mbed_all = [mbed, mbed_crypto, mbed_x509]
 
-provides(Sources,
-        URI("https://tls.mbed.org/download/mbedtls-2.1.0-apache.tgz"),
-        mbed_all, unpacked_dir="mbedtls-2.1.0")
+if haskey(ENV, "USE_GPL_MBEDTLS")  # The source code is identical except for the license text
+    source_uri = URI("https://tls.mbed.org/download/mbedtls-2.1.0-gpl.tgz")
+else
+    source_uri = URI("https://tls.mbed.org/download/mbedtls-2.1.0-apache.tgz")
+end
 
+provides(Sources,
+        source_uri,
+        mbed_all, unpacked_dir="mbedtls-2.1.0")
 
 @unix_only begin
     mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.0")
