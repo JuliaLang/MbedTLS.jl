@@ -45,7 +45,7 @@ let
 
     MbedTLS.setup!(ctx, conf)
     MbedTLS.set_bio!(ctx, sock)
-
+    MbedTLS.hostname!(ctx, "httpbin.org")
     MbedTLS.handshake(ctx)
 
     write(ctx, "GET / HTTP/1.1\r\nHost: httpbin.org\r\n\r\n")

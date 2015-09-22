@@ -211,6 +211,11 @@ function Base.nb_available(ctx::SSLContext)
     Int(n)
 end
 
+function hostname!(ctx::SSLContext, hostname)
+    @err_check ccall((:mbedtls_ssl_set_hostname, MBED_TLS), Cint,
+      (Ptr{Void}, Cstring), ctx.data, hostname)
+end
+
 function __sslinit__()
     global const c_send = cfunction(f_send, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
     global const c_recv = cfunction(f_recv, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
