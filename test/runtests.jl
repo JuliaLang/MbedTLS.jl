@@ -15,7 +15,8 @@ end
 
 # Basic TLS client functionality
 let
-    sock = connect("httpbin.org", 443)
+    testhost = "httpbin.org"
+    sock = connect(testhost, 443)
     entropy = MbedTLS.Entropy()
 
     rng = RandomDevice()
@@ -45,10 +46,10 @@ let
 
     MbedTLS.setup!(ctx, conf)
     MbedTLS.set_bio!(ctx, sock)
-    MbedTLS.hostname!(ctx, "httpbin.org")
+    MbedTLS.hostname!(ctx, testhost)
     MbedTLS.handshake(ctx)
 
-    write(ctx, "GET / HTTP/1.1\r\nHost: httpbin.org\r\n\r\n")
+    write(ctx, "GET / HTTP/1.1\r\nHost: $testhost\r\n\r\n")
     buf = bytestring(readbytes(ctx, 100))
     @test ismatch(r"^HTTP/1.1 200 OK", buf)
 end
