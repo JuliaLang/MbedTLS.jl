@@ -10,8 +10,8 @@ function validate_mbed(name, handle)
         version = VersionNumber(bytestring(pointer(version_ptr)))
         version >= v"2.1.1"
     catch err
-        info("Could not check MbedTLS version, assuming rebuild necessary: ", err)
-        false
+        warn("Could not check MbedTLS version")
+        true
     end
 end
 
