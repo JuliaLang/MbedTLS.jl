@@ -3,11 +3,16 @@ using BinDeps
 @BinDeps.setup
 
 function validate_mbed(name, handle)
-    get_version = Libdl.dlsym(handle, :mbedtls_version_get_string)
-    version_ptr = Vector{UInt8}(9)
-    ccall(get_version, Void, (Ptr{Void},), version_ptr)
-    version = VersionNumber(bytestring(pointer(version_ptr)))
-    version >= v"2.1.1"
+    try
+        get_version = Libdl.dlsym(handle, :mbedtls_version_get_string)
+        version_ptr = Vector{UInt8}(9)
+        ccall(get_version, Void, (Ptr{Void},), version_ptr)
+        version = VersionNumber(bytestring(pointer(version_ptr)))
+        version >= v"2.1.1"
+    catch err
+        info("Could not check MbedTLS version, assuming rebuild necessary: ", err)
+        false
+    end
 end
 
 mbed = library_dependency("libmbedtls", aliases=["libmbedtls", "libmbedtls.2.1.1"], validate=validate_mbed)
@@ -56,7 +61,7 @@ end
         URI("https://cache.e.ip.saba.us/https://malmaud.github.io/files/mbedtls-2.1.1-r1.zip"),
         mbed_all,
         unpacked_dir=unpacked_dir,
-        sha = "ae10d5fea059faa949293669557c52ec50a1b0c9798835452ea2130e990b251a")
+        sha = "ab5a86d6c35d478082722e08747742fe04bf761a8e3ac4f3c960159244bbd8d8")
 end
 
 
