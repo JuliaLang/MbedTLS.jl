@@ -3,6 +3,8 @@ type SSLConfig
     rng
     chain::CRT
     dbg
+    cert
+    key
 
     function SSLConfig()
         conf = new()
@@ -68,6 +70,8 @@ function ca_chain!(config::SSLConfig, chain=crt_parse_file(TRUSTED_CERT_FILE))
 end
 
 function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
+    config.cert = cert
+    config.key = key
     @err_check ccall((:mbedtls_ssl_conf_own_cert, MBED_TLS), Cint,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}),
         config.data, cert.data, key.data)
