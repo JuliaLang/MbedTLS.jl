@@ -1,5 +1,6 @@
 type CtrDrbg  <: AbstractRNG
     data::Ptr{Void}
+    entropy::Nullable{Entropy}
 
     function CtrDrbg()
         ctx = new()
@@ -25,6 +26,7 @@ function f_rng(c_ctx, c_buf, sz)
 end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
+    rng.entropy = Nullable(entropy)
     entropy_func = cglobal((:mbedtls_entropy_func, MBED_CRYPTO))
     @err_check ccall((:mbedtls_ctr_drbg_seed, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Void}, Csize_t),
