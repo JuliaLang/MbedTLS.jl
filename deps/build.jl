@@ -40,7 +40,7 @@ provides(Sources,
                 ChangeDirectory(mbed_dir)
                  @build_steps begin
                     `cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .`
-                    `make`
+                    `make lib`
                 end
             end
         end), mbed_all, installed_libpath=joinpath(mbed_dir, "library"))
