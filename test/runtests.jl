@@ -1,17 +1,9 @@
 using MbedTLS
 using Base.Test
 
-# Hashing
-let
-    @test hash(MbedTLS.SHA1, "test") ==
-      [169, 74, 143, 229, 204, 177, 155, 166, 28, 76, 8, 115, 211, 145, 233, 135, 152, 47, 187, 211]
-
-    ctx = MbedTLS.MD5()
-    write(ctx, UInt8[1, 2])
-    write(ctx, UInt8[3, 4])
-    @test MbedTLS.digest(ctx) ==
-      [8, 214, 192, 90, 33, 81, 42, 121, 161, 223, 235, 157, 42, 143, 38, 47]
-end
+# Message digests
+@test digest(MD_SHA256, "test", "secret") ==
+   UInt8[0x03, 0x29, 0xa0, 0x6b, 0x62, 0xcd, 0x16, 0xb3, 0x3e, 0xb6, 0x79, 0x2b, 0xe8, 0xc6, 0x0b, 0x15, 0x8d, 0x89, 0xa2, 0xee, 0x3a, 0x87, 0x6f, 0xce, 0x9a, 0x88, 0x1e, 0xbb, 0x48, 0x8c, 0x09, 0x14]
 
 # Basic TLS client functionality
 let

@@ -2,6 +2,7 @@ macro err_check(expr)
     quote
         ret = $expr
         ret == 0 || mbed_err(ret)
+        ret
     end
 end
 
@@ -10,7 +11,7 @@ immutable MbedException <: Exception
 end
 
 function show(io::IO, err::MbedException)
-    print(io, "MbedTLS error code $(err.ret): $(strerror(err.ret))")    
+    print(io, "MbedTLS error code $(err.ret): $(strerror(err.ret))")
 end
 
 mbed_err(ret) = throw(MbedException(ret))
