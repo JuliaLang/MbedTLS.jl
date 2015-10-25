@@ -42,12 +42,14 @@ else
 end
 
 const MBED_SUCCESS = Cint(0)
+include("rsa.jl")
 
 include("constants.jl")
 include("error.jl")
+using .ErrorModule
 include("md.jl")
 include("cipher.jl")
-include("rsa.jl")
+using .RSAModule
 include("entropy.jl")
 include("ctr_drbg.jl")
 include("pk.jl")

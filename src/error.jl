@@ -1,6 +1,10 @@
+module ErrorModule
+
+export @err_check
+
 macro err_check(expr)
     quote
-        ret = $expr
+        ret = $(esc(expr))
         ret == 0 || mbed_err(ret)
         ret
     end
@@ -23,3 +27,5 @@ function strerror(ret, bufsize=1000)
         ret, buf, bufsize)
     bytestring(pointer(buf))
 end
+
+end  # ErrorModule

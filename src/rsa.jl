@@ -1,3 +1,9 @@
+module RSAModule
+export RSA
+
+include("error.jl")
+import .ErrorModule: @err_check
+
 type RSA
     data::Ptr{Void}
 
@@ -46,3 +52,5 @@ end
 function private(ctx::RSA, rng::AbstractRNG, input, output)
     private(ctx, c_rng, pointer_from_objref(rng), input, output)
 end
+
+end  # RSAModule
