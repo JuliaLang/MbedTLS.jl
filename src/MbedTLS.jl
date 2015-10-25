@@ -15,6 +15,17 @@ export
     digest,
     digest!,
 
+# Symmetric encryption,
+    encrypt,
+    decrypt,
+    Cipher,
+    CIPHER_AES,
+    CIPHER_DES,
+    CIPHER_3DES,
+    CIPHER_CAMELLIA,
+    CIPHER_BLOWFISH,
+    CIPHER_ARC4,
+
 # Types
     CtrDrbg,
     RSA,
@@ -35,12 +46,14 @@ const MBED_SUCCESS = Cint(0)
 include("constants.jl")
 include("error.jl")
 include("md.jl")
+include("cipher.jl")
 include("rsa.jl")
 include("entropy.jl")
 include("ctr_drbg.jl")
 include("pk.jl")
 include("x509_crt.jl")
 include("ssl.jl")
+
 
 function __init__()
     __ctr_drbg__init__()

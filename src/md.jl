@@ -145,9 +145,10 @@ function finish!(ctx::MD{true}, buf)
 end
 
 function digest!(kind::MDKind, msg, buf)
+    msg_b = bytestring(msg)
     @err_check ccall((:mbedtls_md, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}),
-        MDInfo(kind).data, pointer(msg), sizeof(msg), pointer(buf))
+        MDInfo(kind).data, pointer(msg_b), sizeof(msg_b), pointer(buf))
 end
 
 """
@@ -165,7 +166,8 @@ function digest end
 
 In-place version of `digest` that stores the digest to `buffer`.
 
-It is the user's responsibility to ensure that buffer is long enough to contain the digest. `get_size(kind::MDKind)` returns the appropriate size.
+It is the user's responsibility to ensure that buffer is long enough to contain the digest.
+`get_size(kind::MDKind)` returns the appropriate size.
 """
 function digest! end
 
@@ -176,10 +178,11 @@ function digest(kind::MDKind, msg)
 end
 
 function digest!(kind::MDKind, msg, key, buf)
+    msg_b = bytestring(msg)
     @err_check ccall((:mbedtls_md_hmac, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}, Csize_t, Ptr{Void}),
         MDInfo(kind).data, pointer(key), sizeof(key),
-        pointer(msg), sizeof(msg), pointer(buf))
+        pointer(msg_b), sizeof(msg_b), pointer(buf))
 end
 
 function digest(kind::MDKind, msg, key)
