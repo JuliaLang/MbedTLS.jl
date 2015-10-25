@@ -4,35 +4,8 @@ MbedTLS v0.2.0 Release Notes
 New features
 ---
 
-* Support for symmetric encryption ([#9]) via the `encrypt` and `decrypt` functions
-
-* Support for [HMAC] and non-HMAC [message digests]
-([#9]):
-```julia
-julia> digest(MD_SHA256, "my message", "secret key")
-32-element Array{UInt8,1}:
- 0x62
- 0x31
- 0x3b
- 0xfa
- 0x9b
- 0x36
- 0x81
- 0xa7
- 0x85
- 0x21
-    ⋮
- 0xbe
- 0x32
- 0x69
- 0x3d
- 0x57
- 0x9a
- 0xa2
- 0xe1
- 0x31
- 0xc4
-```
+* Support for symmetric encryption  via the `encrypt` and `decrypt` functions ([#9])
+* Support for [HMAC] and non-HMAC [message digests] ([#9])
 * User-facing functions for RSA key generation
 
 
