@@ -1,7 +1,7 @@
 type RSA
     data::Ptr{Void}
 
-    function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MBEDTLS_MD_MD5)
+    function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MD_MD5)
         ctx = new()
         ctx.data = Libc.malloc(1000)
         ccall((:mbedtls_rsa_init, MBED_CRYPTO), Void,

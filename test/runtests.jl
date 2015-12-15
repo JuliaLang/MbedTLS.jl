@@ -17,6 +17,12 @@ let
     @test message == bytestring(plain_text)
 end
 
+# RSA
+let
+    key = MbedTLS.gen_key(MersenneTwister(0))
+    # todo: test encryption/decryption
+end
+
 # Basic TLS client functionality
 let
     testhost = "httpbin.org"
