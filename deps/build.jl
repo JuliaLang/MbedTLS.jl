@@ -22,9 +22,9 @@ mbed_x509 = library_dependency("libmbedx509", aliases=["libmbedx509", "libmbedx5
 mbed_all = [mbed, mbed_crypto, mbed_x509]
 
 if haskey(ENV, "USE_GPL_MBEDTLS")  # The source code is identical except for the license text
-    source_uri = URI("https://tls.mbed.org/download/mbedtls-2.1.1-gpl.tgz")
+    source_uri = URI("https://cache.julialang.org/https://tls.mbed.org/download/mbedtls-2.1.1-gpl.tgz")
 else
-    source_uri = URI("https://tls.mbed.org/download/mbedtls-2.1.1-apache.tgz")
+    source_uri = URI("https://cache.julialang.org/https://tls.mbed.org/download/mbedtls-2.1.1-apache.tgz")
 end
 
 provides(Sources,
@@ -58,7 +58,7 @@ end
     unpacked_dir = Int==Int32 ? "usr/bin32" : "usr/bin64"
     provides(
         Binaries,
-        URI("https://cache.e.ip.saba.us/https://malmaud.github.io/files/mbedtls-2.1.1-r1.zip"),
+        URI("https://cache.julialang.org/https://malmaud.github.io/files/mbedtls-2.1.1-r1.zip"),
         mbed_all,
         unpacked_dir=unpacked_dir,
         sha = "ab5a86d6c35d478082722e08747742fe04bf761a8e3ac4f3c960159244bbd8d8")
