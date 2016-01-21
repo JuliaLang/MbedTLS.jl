@@ -31,8 +31,17 @@ provides(Sources,
         source_uri,
         mbed_all, unpacked_dir="mbedtls-2.1.1")
 
+function has_cmake()
+    _, process = open(`command -v cmake`)
+    wait(process)
+    process.exitcode == 0
+end
+
 @unix_only begin
     mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.1")
+    if !has_cmake()
+        error("cmake not installed. cmake is required for building from source.")
+    end
     provides(BuildProcess,
         (@build_steps begin
             GetSources(mbed)
