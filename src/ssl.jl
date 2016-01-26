@@ -99,7 +99,7 @@ end
 function f_recv(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
     jl_msg = pointer_to_array(c_msg, sz, false)
-    n = readbytes!(jl_ctx, jl_msg, sz)
+    n = readbytes!(jl_ctx, jl_msg, Int(sz))
     Cint(n)
 end
 
