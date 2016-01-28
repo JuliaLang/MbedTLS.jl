@@ -35,6 +35,7 @@ provides(Sources,
     mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.1")
     provides(BuildProcess,
         (@build_steps begin
+            `./cmake_check.sh`
             GetSources(mbed)
             @build_steps begin
                 ChangeDirectory(mbed_dir)
