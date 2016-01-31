@@ -5,7 +5,7 @@ r=r"#define (\w+)\s+(-?(0x)?[\dA-F]+)"
 c = Dict{ASCIIString, Cint}()
 
 for header in headers
-    s=readall(joinpath(include_dir, header))
+    s=readstring(joinpath(include_dir, header))
     for m in eachmatch(r, s)
         c[m.captures[1]] = parse(Cint, m.captures[2])
     end

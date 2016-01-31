@@ -31,9 +31,9 @@ function crt_parse!(chain, buf::ByteString)
     chain
 end
 
-crt_parse!(chain, buf::IOStream) = crt_parse!(chain, readall(buf))
+crt_parse!(chain, buf::IOStream) = crt_parse!(chain, readstring(buf))
 
-crt_parse_file(path) = crt_parse(readall(path))
+crt_parse_file(path) = crt_parse(readstring(path))
 
 function crt_parse(buf)
     crt = CRT()
