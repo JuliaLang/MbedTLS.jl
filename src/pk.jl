@@ -34,7 +34,7 @@ function parse_public_keyfile!(ctx::PKContext, path)
         ctx.data, path)
 end
 
-function parse_key!(ctx::PKContext, key, maybe_pw=Nullable())
+function parse_key!(ctx::PKContext, key, maybe_pw::Nullable = Nullable())
     key_bs = bytestring(key)
     if isnull(maybe_pw)
         pw = C_NULL
