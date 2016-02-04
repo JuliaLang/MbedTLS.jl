@@ -163,13 +163,6 @@ function CipherInfo(id::CipherID)
     end
 end
 
-function CipherInfo(kind::CipherKind)
-    ptr = ccall((:mbedtls_cipher_info_from_type, MBED_CRYPTO), Ptr{Void},
-        (Cint,), Int(kind))
-    ptr == C_NULL && error("No type found for $cipher")
-    CipherInfo(ptr)
-end
-
 function Cipher(info::CipherInfo)
     cipher = Cipher()
     @err_check ccall((:mbedtls_cipher_setup, MBED_CRYPTO), Cint,
