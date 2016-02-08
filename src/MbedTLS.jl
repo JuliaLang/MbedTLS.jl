@@ -33,6 +33,7 @@ export
     Entropy,
     CRT
 
+using Compat
 import Base: show
 
 if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
