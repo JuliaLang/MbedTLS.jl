@@ -35,6 +35,6 @@ MbedTLS.set_bio!(ctx, sock)
 MbedTLS.handshake(ctx)
 
 write(ctx, "GET / HTTP/1.1\r\nHost: httpbin.org\r\n\r\n")
-buf = bytestring(readbytes(ctx, 100))
+buf = bytestring(read(ctx, 100))
 @test ismatch(r"^HTTP/1.1 200 OK", buf)
 ```

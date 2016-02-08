@@ -171,7 +171,7 @@ end
 
 function Base.readavailable(ctx::SSLContext)
     n = nb_available(ctx)
-    readbytes(ctx,n)
+    read(ctx, n)
 end
 
 function Base.eof(ctx::SSLContext)
