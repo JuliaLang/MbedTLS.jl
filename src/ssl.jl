@@ -93,19 +93,20 @@ end
 function f_send(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
     jl_msg = pointer_to_array(c_msg, sz, false)
-    Cint(write(jl_ctx, jl_msg))
+    return Cint(write(jl_ctx, jl_msg))
 end
 
 function f_recv(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
     jl_msg = pointer_to_array(c_msg, sz, false)
     n = readbytes!(jl_ctx, jl_msg, sz)
-    Cint(n)
+    return Cint(n)
 end
 
 function set_bio!{T<:IO}(ssl_ctx::SSLContext, jl_ctx::T)
     ssl_ctx.bio = jl_ctx
     set_bio!(ssl_ctx, pointer_from_objref(jl_ctx), c_send, c_recv)
+    nothing
 end
 
 function dbg!(conf::SSLConfig, f::Ptr{Void}, p)
@@ -123,55 +124,72 @@ end
 function dbg!(conf::SSLConfig, f)
     conf.dbg = f
     dbg!(conf, c_dbg, pointer_from_objref(f))
+    nothing
 end
 
 function handshake(ctx::SSLContext)
     @err_check ccall((:mbedtls_ssl_handshake, MBED_TLS), Cint,
         (Ptr{Void},), ctx.data)
     ctx.isopen = true
+    nothing
 end
 
-function Base.write(ctx::SSLContext, msg::Vector{UInt8})
-    n = 0
-    N = length(msg)
-    while n < N
+if Base.VERSION < v"0.5-"
+    import Base: read, write
+    const unsafe_read = read
+    const unsafe_write = write
+    @noinline Base.write(ctx::SSLContext, msg::Base.RefValue{UInt8}) = write(ctx, Base.unsafe_convert(Ptr{UInt8}, msg), UInt(sizeof(UInt8)))
+    # the @eval macros are also necessary for this Compat layer to get the symbol name correct for the method
+else
+    import Base: unsafe_read, unsafe_write
+end
+
+@eval function $(symbol(unsafe_write))(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
+    nw = 0
+    while nw < N
         ret = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
                     (Ptr{Void}, Ptr{Void}, Csize_t),
-                    ctx.data, pointer(msg, n+1), N-n)
-        ret<0 && mbed_err(ret)
-        n += ret
+                    ctx.data, msg, N - nw)
+        ret < 0 && mbed_err(ret)
+        nw += ret
+        msg += ret
     end
-    Int(n)
+    return Int(nw)
 end
 
-function ssl_read(ctx, buf, nbytes)
-    n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
-              (Ptr{Void}, Ptr{Void}, Csize_t),
-              ctx.data, buf, nbytes)
-end
+Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 
-function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf))
-    n = 0
-    while true
-        n = ssl_read(ctx, buf, nbytes)
-        if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
+@eval function $(symbol(unsafe_read))(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
+    nread::UInt = 0
+    while nread < nbytes
+        n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
+                  (Ptr{Void}, Ptr{Void}, Csize_t),
+                  ctx.data, buf + nread, nbytes - nread)
+        if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || n == 0
             ctx.isopen = false
-            return 0
-        elseif n ==  MBEDTLS_ERR_SSL_WANT_READ
-            continue
-        elseif n < 0
-            mbed_err(n)
-        else
-            break
+            err ? throw(EOFError()) : return nread
+        end
+        if n != MBEDTLS_ERR_SSL_WANT_READ
+            n < 0 && mbed_err(n)
+            nread += n
         end
     end
-    n < length(buf) && resize!(buf, n)
-    Int(n)
+end
+
+Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf)) = readbytes!(ctx, buf, UInt(nbytes))
+function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt)
+    nr = unsafe_read(ctx, pointer(buf), nbytes; err=false)
+    if nr !== nothing
+        resize!(buf, nr::UInt)
+    else
+        nr = nbytes
+    end
+    return Int(nr::UInt)
 end
 
 function Base.readavailable(ctx::SSLContext)
     n = nb_available(ctx)
-    read(ctx, n)
+    return read(ctx, n)
 end
 
 function Base.eof(ctx::SSLContext)
@@ -179,8 +197,8 @@ function Base.eof(ctx::SSLContext)
     # when this returns false (ie, the underlying socket has bytes available but not
     # a complete record)
     nb_available(ctx)>0 && return false
-    eof(ctx.bio)
- end
+    return eof(ctx.bio)
+end
 
 function Base.close(ctx::SSLContext)
     if isopen(ctx.bio)
@@ -191,28 +209,29 @@ function Base.close(ctx::SSLContext)
         close(ctx.bio)
     end
     ctx.isopen = false
+    nothing
 end
 
 Base.isopen(ctx::SSLContext) = ctx.isopen && isopen(ctx.bio)
 
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, MBED_TLS), Ptr{Void}, (Ptr{Void},), ctx.data)
-    CRT(data)
+    return CRT(data)
 end
 
 function get_version(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_version, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    bytestring(data)
+    return bytestring(data)
 end
 
 function get_ciphersuite(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_ciphersuite, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    bytestring(data)
+    return bytestring(data)
 end
 
 function Base.nb_available(ctx::SSLContext)
     n = ccall((:mbedtls_ssl_get_bytes_avail, MBED_TLS), Csize_t, (Ptr{Void},), ctx.data)
-    Int(n)
+    return Int(n)
 end
 
 function hostname!(ctx::SSLContext, hostname)
