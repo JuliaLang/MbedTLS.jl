@@ -188,8 +188,14 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt)
 end
 
 function Base.readavailable(ctx::SSLContext)
-    n = nb_available(ctx)
-    return read(ctx, n)
+    # For unknown reasons, nb_available on SSLContext erroneously returns 0
+    # until `read` is called on the context. As a temporary hack, we read one
+    # byte from the SSL context to cause nb_available to be accurate.
+    # TODO: figure out and fix the root cause of this
+    b = IOBuffer()
+    write(b, read(ctx, 1))
+    write(b, read(ctx, nb_available(ctx)))
+    return takebuf_array(b)
 end
 
 function Base.eof(ctx::SSLContext)
