@@ -5,10 +5,10 @@ type PKContext
         ctx = new()
         ctx.data = Libc.malloc(32)
 
-        ccall((:mbedtls_pk_init, MBED_TLS), Void, (Ptr{Void},), ctx.data)
+        ccall((:mbedtls_pk_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
 
         finalizer(ctx,ctx->begin
-            ccall((:mbedtls_pk_free, MBED_TLS), Void, (Ptr{Void},), ctx.data)
+            ccall((:mbedtls_pk_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
         end)
 
@@ -17,7 +17,7 @@ type PKContext
 end
 
 function parse_keyfile!(ctx::PKContext, path, password="")
-    @err_check ccall((:mbedtls_pk_parse_keyfile, MBED_TLS), Cint,
+    @err_check ccall((:mbedtls_pk_parse_keyfile, MBED_CRYPTO), Cint,
         (Ptr{Void}, Cstring, Cstring),
         ctx.data, path, password)
 end
@@ -51,7 +51,7 @@ end
 parse_key!(ctx::PKContext, key, pw) = parse_key!(ctx, key, Nullable(pw))
 
 function bitlength(ctx::PKContext)
-    sz = ccall((:mbedtls_pk_get_bitlen, MBED_TLS), Csize_t,
+    sz = ccall((:mbedtls_pk_get_bitlen, MBED_CRYPTO), Csize_t,
         (Ptr{Void},), ctx.data)
     sz >= 0 || mbed_err(sz)
     Int(sz)
@@ -59,7 +59,7 @@ end
 
 function decrypt!(ctx::PKContext, input, output, rng)
     outlen_ref = Ref{Cint}(0)
-    @err_check ccall((:mbedtls_pk_decrypt, MBED_TLS), Cint,
+    @err_check ccall((:mbedtls_pk_decrypt, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{UInt8}, Csize_t, Ptr{Void}, Ref{Cint}, Csize_t, Ptr{Void}, Ptr{Void}),
         ctx.data, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng, pointer_from_objref(rng))
     outlen = outlen_ref[]
@@ -68,7 +68,7 @@ end
 
 function encrypt!(ctx::PKContext, input, output, rng)
     outlen_ref = Ref{Cint}(0)
-    @err_check ccall((:mbedtls_pk_encrypt, MBED_TLS), Cint,
+    @err_check ccall((:mbedtls_pk_encrypt, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{UInt8}, Csize_t, Ptr{Void}, Ref{Cint}, Csize_t, Ptr{Void}, Ptr{Void}),
         ctx.data, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng, pointer_from_objref(rng))
     outlen = outlen_ref[]
