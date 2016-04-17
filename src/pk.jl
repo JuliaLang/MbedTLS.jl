@@ -76,6 +76,6 @@ function encrypt!(ctx::PKContext, input, output, rng)
 end
 
 function get_name(ctx::PKContext)
-    ptr = ccall((:mbedtls_pk_get_name), Ptr{Cchar}, (Ptr{Void},), ctx.data)
+    ptr = ccall((:mbedtls_pk_get_name, MBED_CRYPTO), Ptr{Cchar}, (Ptr{Void},), ctx.data)
     bytestring(ptr)
 end
