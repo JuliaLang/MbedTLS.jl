@@ -64,3 +64,49 @@ let
     buf = bytestring(read(ctx, 100))
     @test ismatch(r"^HTTP/1.1 200 OK", buf)
 end
+
+let
+    rel(p::AbstractString) = joinpath(dirname(@__FILE__), p)
+    keyPath = rel("test.key")
+    certificatePath = rel("test.crt")
+    try
+        rm(keyPath)
+    end
+    try
+        rm(certificatePath)
+    end
+
+    keylength = 1024
+
+    try
+        run(`openssl req -x509 -nodes -days 1 -newkey rsa:$keylength -keyout $keyPath -out $certificatePath`)
+    catch
+        throw(ErrorException("This was OpenSSLs fault"))
+    end
+
+    #read key
+    ctx = MbedTLS.parse_keyfile(keyPath)
+
+    if MbedTLS.get_name(ctx)!="RSA"
+       throw(ErrorException("Key should have been RSA, actual $(MbedTLS.get_name(ctx))"))
+    end
+
+    #check keylength
+    if MbedTLS.bitlength(ctx)!=keylength
+        throw(ErrorException("bitlength mismatch"))
+    end
+
+    #TODO:
+    # -decrypt!
+    # -encrypt!
+    # -parse_key!
+    # -parse_public_keyfile
+
+    #clean up
+    try
+        rm(keyPath)
+    end
+    try
+        rm(certificatePath)
+    end
+end
