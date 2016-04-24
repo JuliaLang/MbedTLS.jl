@@ -134,7 +134,7 @@ function handshake(ctx::SSLContext)
     nothing
 end
 
-if Base.VERSION < v"0.5-"
+if Base.VERSION < v"0.5.0-dev+2301"
     import Base: read, write
     const unsafe_read = read
     const unsafe_write = write
