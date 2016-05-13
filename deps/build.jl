@@ -59,7 +59,7 @@ end
     unpacked_dir = Int==Int32 ? "usr/bin32" : "usr/bin64"
     provides(
         Binaries,
-        URI("https://cache.julialang.org/https://malmaud.github.io/files/mbedtls-2.1.1-r1.zip"),
+        URI("https://malmaud.github.io/files/mbedtls-2.1.1-r1.zip"),
         mbed_all,
         unpacked_dir=unpacked_dir,
         sha = "ab5a86d6c35d478082722e08747742fe04bf761a8e3ac4f3c960159244bbd8d8")
