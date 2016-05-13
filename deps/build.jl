@@ -10,7 +10,7 @@ function validate_mbed(name, handle)
         version = VersionNumber(bytestring(pointer(version_ptr)))
         version >= v"2.1.1"
     catch err
-        warn("Could not check MbedTLS version")
+        warn("Could not check MbedTLS version: $err")
         true
     end
 end
@@ -23,13 +23,16 @@ mbed_all = [mbed, mbed_crypto, mbed_x509]
 
 if haskey(ENV, "USE_GPL_MBEDTLS")  # The source code is identical except for the license text
     source_uri = URI("https://cache.julialang.org/https://tls.mbed.org/download/mbedtls-2.1.1-gpl.tgz")
+    srcsha = "22c76e9d8036a76e01906423b3e8a02ab0ef84027f791bd719fff8edee9c61a9"
 else
     source_uri = URI("https://cache.julialang.org/https://tls.mbed.org/download/mbedtls-2.1.1-apache.tgz")
+    srcsha = "8f25b6f156ae5081e91bcc58b02455926d9324035fe5f7028a6bb5bc0139a757"
 end
 
 provides(Sources,
         source_uri,
-        mbed_all, unpacked_dir="mbedtls-2.1.1")
+        mbed_all, unpacked_dir="mbedtls-2.1.1",
+        SHA = srcsha)
 
 @unix_only begin
     mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.1")
