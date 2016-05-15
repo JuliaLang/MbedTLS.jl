@@ -1,5 +1,5 @@
 using MbedTLS
-using Compat
+using Compat; import Compat.String
 using Base.Test
 
 # Message digests

@@ -1,10 +1,10 @@
-using Compat
+using Compat; import Compat.String
 
 include_dir = joinpath(homedir(), ".julia/v0.4/MbedTLS/deps/src/mbedtls-2.1.0/include/mbedtls")
 headers = filter(x->splitext(x)[2]==".h", readdir(include_dir))
 r=r"#define (\w+)\s+(-?(0x)?[\dA-F]+)"
 
-c = Dict{ASCIIString, Cint}()
+c = Dict{String, Cint}()
 
 for header in headers
     s = readstring(joinpath(include_dir, header))
