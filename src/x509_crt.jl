@@ -23,7 +23,7 @@ function crt_info(crt::CRT)
     bytestring(pointer(buf))
 end
 
-function crt_parse!(chain, buf::ByteString)
+function crt_parse!(chain, buf::String)
     ret = ccall((:mbedtls_x509_crt_parse, MBED_X509), Cint,
         (Ptr{Void}, Ptr{UInt8}, Csize_t),
         chain.data, buf, sizeof(buf)+1)
