@@ -1,5 +1,6 @@
 using MbedTLS
 using Compat
+import Compat: String
 using Base.Test
 
 # Message digests
@@ -15,7 +16,7 @@ let
     cipher_text = encrypt(CIPHER_AES, secret_key, message, iv)
     plain_text = decrypt(CIPHER_AES, secret_key, cipher_text, iv)
 
-    @test message == bytestring(plain_text)
+    @test message == String(plain_text)
 end
 
 # RSA
@@ -61,7 +62,7 @@ let
     MbedTLS.handshake(ctx)
 
     write(ctx, "GET / HTTP/1.1\r\nHost: $testhost\r\n\r\n")
-    buf = bytestring(read(ctx, 100))
+    buf = String(read(ctx, 100))
     @test ismatch(r"^HTTP/1.1 200 OK", buf)
 end
 

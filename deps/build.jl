@@ -1,4 +1,6 @@
 using BinDeps
+using Compat
+import Compat: String
 
 @BinDeps.setup
 
@@ -7,7 +9,7 @@ function validate_mbed(name, handle)
         get_version = Libdl.dlsym(handle, :mbedtls_version_get_string)
         version_ptr = Vector{UInt8}(9)
         ccall(get_version, Void, (Ptr{Void},), version_ptr)
-        version = VersionNumber(bytestring(pointer(version_ptr)))
+        version = VersionNumber(String(pointer(version_ptr)))
         version >= v"2.1.1"
     catch err
         warn("Could not check MbedTLS version: $err")

@@ -21,5 +21,5 @@ function strerror(ret, bufsize=1000)
     ccall((:mbedtls_strerror, MBED_CRYPTO), Cint,
         (Cint, Ptr{Void}, Csize_t),
         ret, buf, bufsize)
-    bytestring(pointer(buf))
+    String(pointer(buf))
 end

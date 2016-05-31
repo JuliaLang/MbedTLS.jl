@@ -117,7 +117,7 @@ end
 
 function f_dbg(c_ctx, level, filename, number, msg)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    jl_ctx(level, bytestring(filename), number, bytestring(msg))
+    jl_ctx(level, String(filename), number, String(msg))
     nothing
 end
 
@@ -144,7 +144,7 @@ else
     import Base: unsafe_read, unsafe_write
 end
 
-@eval function $(symbol(unsafe_write))(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
+@eval function $(Symbol(unsafe_write))(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
     nw = 0
     while nw < N
         ret = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
@@ -159,7 +159,7 @@ end
 
 Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 
-@eval function $(symbol(unsafe_read))(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
+@eval function $(Symbol(unsafe_read))(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
     nread::UInt = 0
     while nread < nbytes
         n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
@@ -227,12 +227,12 @@ end
 
 function get_version(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_version, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    return bytestring(data)
+    return String(data)
 end
 
 function get_ciphersuite(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_ciphersuite, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    return bytestring(data)
+    return String(data)
 end
 
 function Base.nb_available(ctx::SSLContext)

@@ -42,14 +42,14 @@ end
 
 function MDInfo(kind::AbstractString)
     ret = ccall((:mbedtls_md_info_from_string, MBED_CRYPTO), Ptr{Void},
-        (Cstring,), bytestring(kind))
+        (Cstring,), String(kind))
     MDInfo(ret)
 end
 
 function get_name(info::MDInfo)
     ret = ccall((:mbedtls_md_get_name, MBED_CRYPTO), Ptr{UInt8},
         (Ptr{Void},), info.data)
-    bytestring(ret)
+    String(ret)
 end
 
 get_name(md::MD) = get_name(md.info)
@@ -145,7 +145,7 @@ function finish!(ctx::MD{true}, buf)
 end
 
 function digest!(kind::MDKind, msg, buf)
-    msg_b = bytestring(msg)
+    msg_b = String(msg)
     @err_check ccall((:mbedtls_md, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}),
         MDInfo(kind).data, pointer(msg_b), sizeof(msg_b), pointer(buf))
@@ -178,7 +178,7 @@ function digest(kind::MDKind, msg)
 end
 
 function digest!(kind::MDKind, msg, key, buf)
-    msg_b = bytestring(msg)
+    msg_b = String(msg)
     @err_check ccall((:mbedtls_md_hmac, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}, Csize_t, Ptr{Void}),
         MDInfo(kind).data, pointer(key), sizeof(key),
