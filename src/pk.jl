@@ -35,12 +35,12 @@ function parse_public_keyfile!(ctx::PKContext, path)
 end
 
 function parse_key!(ctx::PKContext, key, maybe_pw::Nullable = Nullable())
-    key_bs = bytestring(key)
+    key_bs = String(key)
     if isnull(maybe_pw)
         pw = C_NULL
         pw_size = 0
     else
-        pw = bytestring(get(maybe_pw))
+        pw = String(get(maybe_pw))
         pw_size = sizeof(pw)  # Might be off-by-one
     end
     @err_check ccall((:mbedtls_pk_parse_key, MBED_TLS), Cint,
@@ -77,5 +77,5 @@ end
 
 function get_name(ctx::PKContext)
     ptr = ccall((:mbedtls_pk_get_name, MBED_CRYPTO), Ptr{Cchar}, (Ptr{Void},), ctx.data)
-    bytestring(ptr)
+    String(ptr)
 end

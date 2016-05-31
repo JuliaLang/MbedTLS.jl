@@ -1,4 +1,5 @@
 using Compat
+import Compat: ASCIIString
 
 include_dir = joinpath(homedir(), ".julia/v0.4/MbedTLS/deps/src/mbedtls-2.1.0/include/mbedtls")
 headers = filter(x->splitext(x)[2]==".h", readdir(include_dir))

@@ -108,7 +108,7 @@ end
 
 function CipherInfo(name::AbstractString)
     ptr = ccall((:mbedtls_cipher_info_from_string, MBED_CRYPTO), Ptr{Void},
-        (Cstring,), bytestring(name))
+        (Cstring,), String(name))
     ptr == C_NULL && error("No cipher for $name found")
     CipherInfo(ptr)
 end
@@ -192,7 +192,7 @@ function get_key_bitlen(cipher::Cipher)
 end
 
 tobytes(x::Vector{UInt8}) = x
-tobytes(x) = bytestring(x).data
+tobytes(x) = String(x).data
 
 function set_key!(cipher::Cipher, key, op::Operation)
     key_b = tobytes(key)
@@ -218,7 +218,7 @@ end
 """
 `update!(cipher::Cipher, buf_in, buf_out::Vector{UInt8}) -> Int`
 
-Run the given cipher on `buf_in` (a bytestring or `Vector{UInt8}`) and
+Run the given cipher on `buf_in` (a String or `Vector{UInt8}`) and
 store the result of the cipher in `buf_out` (a `Vector{UInt8}`).
 
 It is your responsibility to ensure that `buf_out` is at least as large as necessary
@@ -294,11 +294,11 @@ Encrypt a message using the given cipher. The cipher can be specified as
 - a specific cipher (like CIPHER_AES_256_CBC)
 - a Cipher object
 
-`key` is the symmetric key used for cryptography, given as either a bytestring or a
+`key` is the symmetric key used for cryptography, given as either a String or a
 `Vector{UInt8}`. It must be the right length for the chosen cipher; for example,
 CIPHER_AES_256_CBC requires a 32-byte (256-bit) key.
 
-`msg` is the message to be encoded. It should either be convertible to a bytestring
+`msg` is the message to be encoded. It should either be convertible to a String
 or be a `Vector{UInt8}`.
 
 `iv` is the initialization vector, whose size must match the block size of the
@@ -317,11 +317,11 @@ Decrypt a message using the given cipher. The cipher can be specified as
 - a specific cipher (like CIPHER_AES_256_CBC)
 - a Cipher object
 
-`key` is the symmetric key used for cryptography, given as either a bytestring or a
+`key` is the symmetric key used for cryptography, given as either a String or a
 `Vector{UInt8}`. It must be the right length for the chosen cipher; for example,
 CIPHER_AES_256_CBC requires a 32-byte (256-bit) key.
 
-`msg` is the message to be encoded. It should either be convertible to a bytestring
+`msg` is the message to be encoded. It should either be convertible to a String
 or be a `Vector{UInt8}`.
 
 `iv` is the initialization vector, whose size must match the block size of the

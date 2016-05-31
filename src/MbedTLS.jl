@@ -34,6 +34,7 @@ export
     CRT
 
 using Compat
+import Compat: String
 import Base: show
 
 if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
