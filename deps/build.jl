@@ -1,4 +1,6 @@
 using BinDeps
+using Compat
+import Compat: String
 
 @BinDeps.setup
 
