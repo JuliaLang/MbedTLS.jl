@@ -25,7 +25,7 @@ end
 
 function jl_entropy(data, output, len, olen)
     f = unsafe_pointer_to_objref(data)
-    output_jl = pointer_to_array(convert(Ptr{UInt8}, output), len, false)
+    output_jl = unsafe_wrap(Array, convert(Ptr{UInt8}, output), len, false)
     sz = f(output_jl)
     unsafe_store!(convert(Ptr{Csize_t}, olen), Csize_t(sz))
     return Cint(0)
