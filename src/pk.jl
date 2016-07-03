@@ -77,5 +77,5 @@ end
 
 function get_name(ctx::PKContext)
     ptr = ccall((:mbedtls_pk_get_name, MBED_CRYPTO), Ptr{Cchar}, (Ptr{Void},), ctx.data)
-    unsafe_string(ptr)
+    unsafe_string(convert(Ptr{UInt8}, ptr))
 end
