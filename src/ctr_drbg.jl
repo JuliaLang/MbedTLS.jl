@@ -20,7 +20,7 @@ end
 
 function f_rng(c_ctx, c_buf, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    jl_buf = pointer_to_array(c_buf, sz, false)
+    jl_buf = unsafe_wrap(Array, c_buf, sz, false)
     rand!(jl_ctx, jl_buf)
     MBED_SUCCESS
 end
