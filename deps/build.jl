@@ -13,7 +13,7 @@ function validate_mbed(name, handle)
         version >= v"2.1.1"
     catch err
         warn("Could not check MbedTLS version: $err")
-        true
+        false
     end
 end
 
