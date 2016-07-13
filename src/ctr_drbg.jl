@@ -43,7 +43,7 @@ function Base.rand!(rng::CtrDrbg, buf::Array)
     buf
 end
 
-function Base.rand(rng::CtrDrbg, size)
+function Base.rand(rng::CtrDrbg, size::Integer)
     buf = Vector{UInt8}(size)
     rand!(rng, buf)
 end
