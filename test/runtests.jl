@@ -104,7 +104,7 @@ let
     MbedTLS.handshake(ctx)
 
     write(ctx, "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-    @assert MbedTLS.alpn_proto(ctx) == "h2"
+    @test MbedTLS.alpn_proto(ctx) == "h2"
 end
 
 # Test pk.jl methods
