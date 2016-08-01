@@ -66,6 +66,47 @@ let
     @test ismatch(r"^HTTP/1.1 200 OK", buf)
 end
 
+# Test ALPN
+let
+    testhost = "google.com"
+    sock = connect(testhost, 443)
+    entropy = MbedTLS.Entropy()
+
+    rng = RandomDevice()
+    function entropy_func(buf)
+        buf[:] = rand(rng, UInt8, length(buf))
+        return length(buf)
+    end
+
+    MbedTLS.add_source!(entropy, entropy_func, 0, true)
+    rng = MbedTLS.CtrDrbg()
+    MbedTLS.seed!(rng, entropy)
+
+    ctx = MbedTLS.SSLContext()
+    conf = MbedTLS.SSLConfig()
+
+    MbedTLS.config_defaults!(conf)
+    MbedTLS.set_alpn!(conf, ["h2"])
+    MbedTLS.authmode!(conf, MbedTLS.MBEDTLS_SSL_VERIFY_REQUIRED)
+    MbedTLS.rng!(conf, rng)
+
+    function show_debug(level, filename, number, msg)
+        @show level, filename, number, msg
+    end
+
+    MbedTLS.dbg!(conf, show_debug)
+
+    MbedTLS.ca_chain!(conf)
+
+    MbedTLS.setup!(ctx, conf)
+    MbedTLS.set_bio!(ctx, sock)
+    MbedTLS.hostname!(ctx, testhost)
+    MbedTLS.handshake(ctx)
+
+    write(ctx, "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+    @assert MbedTLS.alpn_proto(ctx) == "h2"
+end
+
 # Test pk.jl methods
 let
     key = MbedTLS.parse_keyfile("key.pem")
