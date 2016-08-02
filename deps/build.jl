@@ -9,7 +9,7 @@ function validate_mbed(name, handle)
         get_version = Libdl.dlsym(handle, :mbedtls_version_get_string)
         version_ptr = Vector{UInt8}(9)
         ccall(get_version, Void, (Ptr{Void},), version_ptr)
-        version = VersionNumber(String(pointer(version_ptr)))
+        version = VersionNumber(unsafe_string(pointer(version_ptr)))
         version >= v"2.1.1"
     catch err
         warn("Could not check MbedTLS version: $err")
@@ -36,7 +36,7 @@ provides(Sources,
         mbed_all, unpacked_dir="mbedtls-2.1.1",
         SHA = srcsha)
 
-@unix_only begin
+if is_unix() 
     mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.1")
     provides(BuildProcess,
         (@build_steps begin
@@ -52,7 +52,7 @@ provides(Sources,
         end), mbed_all, installed_libpath=joinpath(mbed_dir, "library"))
 end
 
-@osx_only begin
+if is_apple() 
     if Pkg.installed("Homebrew") === nothing
 		error("Homebrew package not installed, please run Pkg.add(\"Homebrew\")")
 	end
@@ -60,7 +60,7 @@ end
 	provides(Homebrew.HB, "mbedtls", mbed_all)
 end
 
-@windows_only begin
+if is_windows() 
     unpacked_dir = Int==Int32 ? "usr/bin32" : "usr/bin64"
     provides(
         Binaries,
