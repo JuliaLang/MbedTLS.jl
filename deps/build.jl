@@ -50,6 +50,13 @@ if is_unix()
                 end
             end
         end), mbed_all, installed_libpath=joinpath(mbed_dir, "library"))
+
+    if is_linux()
+        provides(AptGet,
+            Dict("libmbedtls10"=>mbed,
+                 "libmbedcrypto0"=>mbed_crypto,
+                 "libmbedx509-0"=>mbed_x509))
+    end
 end
 
 if is_apple() 
