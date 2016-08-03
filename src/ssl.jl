@@ -5,6 +5,7 @@ type SSLConfig
     dbg
     cert
     key
+    alpn_protos
 
     function SSLConfig()
         conf = new()
@@ -132,6 +133,19 @@ function handshake(ctx::SSLContext)
         (Ptr{Void},), ctx.data)
     ctx.isopen = true
     nothing
+end
+
+function set_alpn!(conf::SSLConfig, protos)
+    conf.alpn_protos = protos
+    @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, MBED_TLS), Cint,
+                     (Ptr{Void}, Ptr{Ptr{Cchar}}), conf.data, protos)
+    nothing
+end
+
+function alpn_proto(ctx::SSLContext)
+    rv = ccall((:mbedtls_ssl_get_alpn_protocol, MBED_TLS), Ptr{Cchar},
+               (Ptr{Void},), ctx.data)
+    String(rv)
 end
 
 if Base.VERSION < v"0.5.0-dev+2301"
