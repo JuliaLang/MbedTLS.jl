@@ -53,6 +53,11 @@ function mpi_size(mpi::Ptr{mbedtls_mpi})
     ccall((:mbedtls_mpi_size, MBED_CRYPTO), Csize_t, (Ptr{mbedtls_mpi},), mpi)
 end
 
+# 0.4 had a buggy implementation of fieldoffset (off by one)
+if !isdefined(Base, :fieldoffset) && isdefined(Base, :field_offset)
+    fieldoffset(T, i) = Base.field_offset(T, i) - 1
+end
+
 function pubkey_from_vals!(ctx::RSA, e::BigInt, n::BigInt)
     Nptr = Ptr{mbedtls_mpi}(ctx.data+fieldoffset(mbedtls_rsa_context,3 #= :N =#))
     mpi_import!(Nptr, n)
