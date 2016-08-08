@@ -1,5 +1,23 @@
+immutable mbedtls_mpi
+    s::Cint
+    n::Csize_t
+    p::Ptr{Cuint}
+end
+
+immutable mbedtls_rsa_context
+    ver::Cint
+    len::Csize_t
+    N::mbedtls_mpi
+    E::mbedtls_mpi
+    D::mbedtls_mpi
+    P::mbedtls_mpi
+    Q::mbedtls_mpi
+    # More fields follow, but omitted here, since they
+    # are not required for this wrapper
+end
+
 type RSA
-    data::Ptr{Void}
+    data::Ptr{mbedtls_rsa_context}
 
     function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MD_MD5)
         ctx = new()
@@ -13,6 +31,51 @@ type RSA
         end)
         ctx
     end
+end
+
+function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
+    # Export from GMP
+    size = ndigits(b, 2)
+    nbytes = div(size+8-1,8)
+    data = Array(UInt8, nbytes)
+    count = Ref{Csize_t}(0)
+    ccall((:__gmpz_export,:libgmp), Ptr{Void},
+            (Ptr{Void}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Ptr{BigInt}),
+            data, count, 1, 1, 1, 0, &b)
+    @assert count[] == nbytes
+    # Import into mbedtls
+    @err_check ccall((:mbedtls_mpi_read_binary, MBED_CRYPTO), Cint,
+        (Ptr{mbedtls_mpi}, Ptr{UInt8}, Csize_t),
+        mpi, data, nbytes)
+end
+
+function mpi_size(mpi::Ptr{mbedtls_mpi})
+    ccall((:mbedtls_mpi_size, MBED_CRYPTO), Csize_t, (Ptr{mbedtls_mpi},), mpi)
+end
+
+function pubkey_from_vals!(ctx::RSA, e::BigInt, n::BigInt)
+    Nptr = Ptr{mbedtls_mpi}(ctx.data+fieldoffset(mbedtls_rsa_context,3 #= :N =#))
+    mpi_import!(Nptr, n)
+    mpi_import!(Ptr{mbedtls_mpi}(ctx.data+fieldoffset(mbedtls_rsa_context,4 #= :E =#)), e)
+    nptr_size = mpi_size(Nptr)
+    unsafe_store!(Ptr{Csize_t}(ctx.data+fieldoffset(mbedtls_rsa_context,2 #=:len =#)),
+        nptr_size)
+    @err_check ccall((:mbedtls_rsa_check_pubkey, MBED_CRYPTO), Cint,
+        (Ptr{Void},), ctx.data)
+    ctx
+end
+
+function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; using_public=true)
+    (!using_public && rng == nothing) &&
+        error("Private key verification requires the rng")
+    # All errors, including validation errors throw
+    @err_check ccall((:mbedtls_rsa_pkcs1_verify, MBED_CRYPTO), Cint,
+        (Ptr{Void}, Ptr{Void}, Ptr{Void}, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
+        ctx.data,
+        rng == nothing ? C_NULL : c_rng,
+        rng == nothing ? C_NULL : pointer_from_objref(rng),
+        using_public ? 0 : 1,
+        hash_alg, sizeof(hash), hash, signature)
 end
 
 
