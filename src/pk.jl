@@ -75,6 +75,15 @@ function encrypt!(ctx::PKContext, input, output, rng)
     Int(outlen)
 end
 
+function sign!(ctx::PKContext, hash_alg::MDKind, hash, output, rng)
+    outlen_ref = Ref{Cint}(sizeof(output))
+    @err_check ccall((:mbedtls_pk_sign, MBED_CRYPTO), Cint,
+        (Ptr{Void}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Cint}, Ptr{Void}, Ptr{Void}),
+        ctx.data, hash_alg, hash, sizeof(hash), output, outlen_ref, c_rng, pointer_from_objref(rng))
+    outlen = outlen_ref[]
+    Int(outlen)
+end
+
 function get_name(ctx::PKContext)
     ptr = ccall((:mbedtls_pk_get_name, MBED_CRYPTO), Ptr{Cchar}, (Ptr{Void},), ctx.data)
     unsafe_string(convert(Ptr{UInt8}, ptr))
