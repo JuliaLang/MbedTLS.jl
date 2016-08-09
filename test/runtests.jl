@@ -113,3 +113,12 @@ let
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
 end
+
+# Test md.jl
+let
+    md = MbedTLS.MD(MD_SHA1)
+    write(md, UInt8['M', 'b', 'e', 'd'])
+    write(md, reinterpret(UInt32, UInt8['T', 'L', 'S', '.'])[])
+    write(md, reinterpret(UInt16, UInt8['j','l']))
+    @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,"MbedTLS.jl".data)
+end
