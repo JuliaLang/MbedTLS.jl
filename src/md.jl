@@ -118,18 +118,27 @@ end
 get_size(md::MD) = get_size(md.info)
 get_size(kind::MDKind) = get_size(MDInfo(kind))
 
-function Base.write(ctx::MD{false}, buf::Vector{UInt8})
+function _write(ctx::MD{false}, buf, size)
     @err_check ccall((:mbedtls_md_update, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t),
-        ctx.data, pointer(buf), length(buf))
-    length(buf)
+        ctx.data, buf, size)
 end
 
-function Base.write(ctx::MD{true}, buf::Vector{UInt8})
+function _write(ctx::MD{true}, buf, size)
     @err_check ccall((:mbedtls_md_hmac_update, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Csize_t),
-        ctx.data, pointer(buf), length(buf))
-    length(buf)
+        ctx.data, buf, size)
+end
+
+function Base.write(ctx::MD, buf::Vector)
+    isbits(eltype(buf)) || error("Expected a vector of bits types got $(typeof(buf))")
+    _write(ctx, buf, sizeof(buf))
+end
+# To avoid ambiguity warnings
+Base.write(ctx::MD, buf::Vector{UInt8}) = _write(ctx, buf, sizeof(buf))
+
+function Base.write(ctx::MD, i::Union{Float16,Float32,Float64,Int128,Int16,Int32,Int64,UInt128,UInt16,UInt32,UInt64})
+    _write(ctx, Ref(i), sizeof(i))
 end
 
 function finish!(ctx::MD{false}, buf)
@@ -142,6 +151,12 @@ function finish!(ctx::MD{true}, buf)
     @err_check ccall((:mbedtls_md_hmac_finish, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}),
         ctx.data, pointer(buf))
+end
+
+function finish!(ctx::MD)
+    buf = Array(UInt8, get_size(ctx))
+    finish!(ctx, buf)
+    buf
 end
 
 function digest!(kind::MDKind, msg, buf)
