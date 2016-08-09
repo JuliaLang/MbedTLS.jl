@@ -145,7 +145,7 @@ end
 function alpn_proto(ctx::SSLContext)
     rv = ccall((:mbedtls_ssl_get_alpn_protocol, MBED_TLS), Ptr{Cchar},
                (Ptr{Void},), ctx.data)
-    String(rv)
+    unsafe_string(rv)
 end
 
 if Base.VERSION < v"0.5.0-dev+2301"
