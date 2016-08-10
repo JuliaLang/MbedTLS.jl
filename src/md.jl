@@ -140,6 +140,8 @@ Base.write(ctx::MD, buf::Vector{UInt8}) = _write(ctx, buf, sizeof(buf))
 function Base.write(ctx::MD, i::Union{Float16,Float32,Float64,Int128,Int16,Int32,Int64,UInt128,UInt16,UInt32,UInt64})
     _write(ctx, Ref(i), sizeof(i))
 end
+Base.write(ctx::MD, i::UInt8) = _write(ctx, Ref(i), sizeof(i))
+Base.write(ctx::MD, i::Int8) = _write(ctx, Ref(i), sizeof(i))
 
 function finish!(ctx::MD{false}, buf)
     @err_check ccall((:mbedtls_md_finish, MBED_CRYPTO), Cint,
