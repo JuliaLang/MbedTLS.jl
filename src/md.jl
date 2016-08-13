@@ -161,6 +161,12 @@ function finish!(ctx::MD)
     buf
 end
 
+function reset!(ctx::MD)
+    @err_check ccall((:mbedtls_md_hmac_reset, MBED_CRYPTO), Cint,
+        (Ptr{Void},),
+        ctx.data)
+end
+
 function digest!(kind::MDKind, msg, buf)
     msg_b = String(msg)
     @err_check ccall((:mbedtls_md, MBED_CRYPTO), Cint,
