@@ -161,7 +161,7 @@ function finish!(ctx::MD)
     buf
 end
 
-function reset!(ctx::MD)
+function reset!(ctx::MD{true})
     @err_check ccall((:mbedtls_md_hmac_reset, MBED_CRYPTO), Cint,
         (Ptr{Void},),
         ctx.data)

@@ -181,4 +181,16 @@ let
     write(md, reinterpret(UInt32, UInt8['T', 'L', 'S', '.'])[])
     write(md, reinterpret(UInt16, UInt8['j','l']))
     @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,"MbedTLS.jl".data)
+
+    # Test reset functionality
+    md = MbedTLS.MD(MbedTLS.MD_SHA256, "passcode")
+    write(md, "msg")
+    digest1 = MbedTLS.finish!(md)
+    MbedTLS.reset!(md)
+    write(md, "msg")
+    digest2 = MbedTLS.finish!(md)
+    @test digest1 == digest2
+    write(md, "msg")
+    digest3 = MbedTLS.finish!(md)
+    @test digest1 ≠ digest3
 end
