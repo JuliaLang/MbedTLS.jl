@@ -31,12 +31,28 @@ else
     srcsha = "8f25b6f156ae5081e91bcc58b02455926d9324035fe5f7028a6bb5bc0139a757"
 end
 
+# Use the version of MbedTLS that ships with Julia .5 and later
+
+julia_bin = Base.julia_cmd().exec[1]
+
+# For a binary install of Julia
+provides(Binaries,
+    joinpath(dirname(julia_bin), "..", "lib", "julia"),
+    mbed_all)
+
+# For a source install of Julia
+provides(Binaries,
+    joinpath(dirname(julia_bin), "..", "lib"),
+    mbed_all)
+
+# For Julia versions less than .5
+
 provides(Sources,
         source_uri,
         mbed_all, unpacked_dir="mbedtls-2.1.1",
         SHA = srcsha)
 
-if is_unix() 
+if is_unix()
     mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.1")
     provides(BuildProcess,
         (@build_steps begin
@@ -52,7 +68,7 @@ if is_unix()
         end), mbed_all, installed_libpath=joinpath(mbed_dir, "library"))
 end
 
-if is_apple() 
+if is_apple()
     if Pkg.installed("Homebrew") === nothing
 		error("Homebrew package not installed, please run Pkg.add(\"Homebrew\")")
 	end
@@ -60,7 +76,7 @@ if is_apple()
 	provides(Homebrew.HB, "mbedtls", mbed_all)
 end
 
-if is_windows() 
+if is_windows()
     unpacked_dir = Int==Int32 ? "usr/bin32" : "usr/bin64"
     provides(
         Binaries,
