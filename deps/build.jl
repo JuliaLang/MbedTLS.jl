@@ -33,17 +33,10 @@ end
 
 # Use the version of MbedTLS that ships with Julia .5 and later
 
-julia_bin = Base.julia_cmd().exec[1]
-
-# For a binary install of Julia
 provides(Binaries,
-    joinpath(dirname(julia_bin), "..", "lib", "julia"),
+    joinpath(dirname(JULIA_HOME), "..", "lib", "julia"),
     mbed_all)
 
-# For a source install of Julia
-provides(Binaries,
-    joinpath(dirname(julia_bin), "..", "lib"),
-    mbed_all)
 
 # For Julia versions less than .5
 
