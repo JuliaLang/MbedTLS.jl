@@ -31,10 +31,22 @@ else
     srcsha = "8f25b6f156ae5081e91bcc58b02455926d9324035fe5f7028a6bb5bc0139a757"
 end
 
+function BinDeps.generate_steps(dep::BinDeps.LibraryDependency,h::BinDeps.CustomPathBinaries,opts)
+    steps = @build_steps begin
+        BinDeps.ChecksumValidator(get(opts,:SHA,get(opts,:sha,"")),h.path)
+    end
+end
+
 # Use the version of MbedTLS that ships with Julia .5 and later
 
+# For Unix
 provides(Binaries,
-    joinpath(dirname(JULIA_HOME), "..", "lib", "julia"),
+    joinpath(JULIA_HOME, "..", "lib", "julia"),
+    mbed_all)
+
+# For Windows
+provides(Binaries,
+    JULIA_HOME,
     mbed_all)
 
 
