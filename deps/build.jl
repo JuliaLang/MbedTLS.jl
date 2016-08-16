@@ -49,7 +49,7 @@ if is_windows()
     provides(Binaries,
         JULIA_HOME,
         mbed_all)
-eend
+end
 
 # For Julia versions less than .5
 
