@@ -39,16 +39,17 @@ end
 
 # Use the version of MbedTLS that ships with Julia .5 and later
 
-# For Unix
-provides(Binaries,
-    joinpath(JULIA_HOME, "..", "lib", "julia"),
-    mbed_all)
+if is_unix()
+    provides(Binaries,
+        joinpath(JULIA_HOME, "..", "lib", "julia"),
+        mbed_all)
+end
 
-# For Windows
-provides(Binaries,
-    JULIA_HOME,
-    mbed_all)
-
+if is_windows()
+    provides(Binaries,
+        JULIA_HOME,
+        mbed_all)
+eend
 
 # For Julia versions less than .5
 
