@@ -44,7 +44,7 @@ function parse_key!(ctx::PKContext, key, maybe_pw::Nullable = Nullable())
         pw_size = sizeof(pw)  # Might be off-by-one
     end
     @err_check ccall((:mbedtls_pk_parse_key, MBED_TLS), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}, Csize_t),
+        (Ptr{Void}, Ptr{Cuchar}, Csize_t, Ptr{Cuchar}, Csize_t),
         ctx.data, key_bs, sizeof(key_bs)+1, pw, pw_size)
 end
 

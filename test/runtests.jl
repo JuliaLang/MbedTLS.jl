@@ -172,6 +172,12 @@ let
     @test sizeof(output) == MbedTLS.sign!(key, MD_SHA1,
         MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), output, MersenneTwister(0))
     verify_key_pem("MbedTLS.jl", output)
+
+    key_string = read(open("key.pem", "r"))
+    key = MbedTLS.PKContext()
+    MbedTLS.parse_key!(key, key_string)
+    @test MbedTLS.bitlength(key) == 2048
+    @test MbedTLS.get_name(key) == "RSA"
 end
 
 # Test md.jl
