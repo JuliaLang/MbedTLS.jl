@@ -29,7 +29,7 @@ function parse_keyfile(path, password="")
 end
 
 function parse_public_keyfile!(ctx::PKContext, path)
-    @err_check ccall((:mbedtls_pk_parse_public_keyfile, MBED_TLS), Cint,
+    @err_check ccall((:mbedtls_pk_parse_public_keyfile, MBED_CRYPTO), Cint,
         (Ptr{Void}, Cstring),
         ctx.data, path)
 end
@@ -43,8 +43,8 @@ function parse_key!(ctx::PKContext, key, maybe_pw::Nullable = Nullable())
         pw = String(get(maybe_pw))
         pw_size = sizeof(pw)  # Might be off-by-one
     end
-    @err_check ccall((:mbedtls_pk_parse_key, MBED_TLS), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}, Csize_t),
+    @err_check ccall((:mbedtls_pk_parse_key, MBED_CRYPTO), Cint,
+        (Ptr{Void}, Ptr{Cuchar}, Csize_t, Ptr{Cuchar}, Csize_t),
         ctx.data, key_bs, sizeof(key_bs)+1, pw, pw_size)
 end
 
