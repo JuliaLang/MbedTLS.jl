@@ -29,7 +29,7 @@ function parse_keyfile(path, password="")
 end
 
 function parse_public_keyfile!(ctx::PKContext, path)
-    @err_check ccall((:mbedtls_pk_parse_public_keyfile, MBED_TLS), Cint,
+    @err_check ccall((:mbedtls_pk_parse_public_keyfile, MBED_CRYPTO), Cint,
         (Ptr{Void}, Cstring),
         ctx.data, path)
 end
