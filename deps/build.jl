@@ -23,6 +23,8 @@ mbed_x509 = library_dependency("libmbedx509", aliases=["libmbedx509", "libmbedx5
 
 mbed_all = [mbed, mbed_crypto, mbed_x509]
 
+provides(AptGet, "libmbedtls-dev", mbed_all)
+
 if haskey(ENV, "USE_GPL_MBEDTLS")  # The source code is identical except for the license text
     source_uri = URI("https://cache.julialang.org/https://tls.mbed.org/download/mbedtls-2.1.1-gpl.tgz")
     srcsha = "22c76e9d8036a76e01906423b3e8a02ab0ef84027f791bd719fff8edee9c61a9"
