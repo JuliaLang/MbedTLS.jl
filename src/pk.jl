@@ -34,6 +34,12 @@ function parse_public_keyfile!(ctx::PKContext, path)
         ctx.data, path)
 end
 
+function parse_public_keyfile(path)
+    ctx = PKContext()
+    parse_public_keyfile!(ctx, path)
+    ctx
+end
+
 function parse_key!(ctx::PKContext, key, maybe_pw::Nullable = Nullable())
     key_bs = String(key)
     if isnull(maybe_pw)
@@ -76,12 +82,25 @@ function encrypt!(ctx::PKContext, input, output, rng)
 end
 
 function sign!(ctx::PKContext, hash_alg::MDKind, hash, output, rng)
-    outlen_ref = Ref{Cint}(sizeof(output))
+    outlen_ref = Ref{Csize_t}(sizeof(output))
     @err_check ccall((:mbedtls_pk_sign, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Cint}, Ptr{Void}, Ptr{Void}),
+        (Ptr{Void}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Csize_t}, Ptr{Void}, Ptr{Void}),
         ctx.data, hash_alg, hash, sizeof(hash), output, outlen_ref, c_rng, pointer_from_objref(rng))
     outlen = outlen_ref[]
     Int(outlen)
+end
+
+function sign(ctx::PKContext, hash_alg::MDKind, hash, rng)
+    n = Int64(ceil(bitlength(ctx) / 8))
+    output = Vector{UInt8}(n)
+    @assert sign!(ctx, hash_alg, hash, output, rng) == n
+    output
+end
+
+function verify(ctx::PKContext, hash_alg::MDKind, hash, signature)
+    @err_check ccall((:mbedtls_pk_verify, MBED_CRYPTO), Cint,
+        (Ptr{Void}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t),
+        ctx.data, hash_alg, hash, sizeof(hash), signature, sizeof(signature))
 end
 
 function get_name(ctx::PKContext)
