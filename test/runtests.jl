@@ -183,6 +183,12 @@ let
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
 
+    pubkey_string = read(open("public_key.pem", "r"))
+    pubkey = MbedTLS.PKContext()
+    MbedTLS.parse_public_key!(pubkey, pubkey_string)
+    @test MbedTLS.bitlength(pubkey) == 2048
+    @test MbedTLS.get_name(pubkey) == "RSA"
+
     key = MbedTLS.parse_keyfile("key.pem")
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
