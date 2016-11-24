@@ -45,7 +45,7 @@ if is_unix()
             @build_steps begin
                 ChangeDirectory(mbed_dir)
                  @build_steps begin
-                    `cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .`
+                    `cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On $(Sys.ARCH == :arm ? "-DCMAKE_C_FLAGS=-fomit-frame-pointer" : "") .`
                     `make lib`
                 end
             end
