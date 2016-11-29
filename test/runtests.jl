@@ -173,11 +173,38 @@ let
         MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), output, MersenneTwister(0))
     verify_key_pem("MbedTLS.jl", output)
 
+    signature = MbedTLS.sign(key, MD_SHA1,
+        MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), MersenneTwister(0))
+    @test signature == output[1:length(signature)]
+
     key_string = read(open("key.pem", "r"))
     key = MbedTLS.PKContext()
     MbedTLS.parse_key!(key, key_string)
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
+
+    pubkey_string = read(open("public_key.pem", "r"))
+    pubkey = MbedTLS.PKContext()
+    MbedTLS.parse_public_key!(pubkey, pubkey_string)
+    @test MbedTLS.bitlength(pubkey) == 2048
+    @test MbedTLS.get_name(pubkey) == "RSA"
+
+    key = MbedTLS.parse_keyfile("key.pem")
+    @test MbedTLS.bitlength(key) == 2048
+    @test MbedTLS.get_name(key) == "RSA"
+
+    pubkey = MbedTLS.parse_public_keyfile("public_key.pem")
+    @test MbedTLS.bitlength(pubkey) == 2048
+    @test MbedTLS.get_name(pubkey) == "RSA"
+
+    for md in instances(MbedTLS.MDKind)
+        if in(md, (MD_NONE, MD_MD2, MD_MD4))
+            continue
+        end
+        hash = MbedTLS.digest(md, "MbedTLS.jl")
+        signature = MbedTLS.sign(key, md, hash, MersenneTwister(0))
+        @test MbedTLS.verify(pubkey, md, hash, signature) == 0
+    end
 end
 
 # Test md.jl
