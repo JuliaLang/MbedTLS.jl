@@ -241,12 +241,12 @@ end
 
 function get_version(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_version, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    return String(data)
+    return unsafe_string(data)
 end
 
 function get_ciphersuite(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_ciphersuite, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    return String(data)
+    return unsafe_string(data)
 end
 
 function Base.nb_available(ctx::SSLContext)
