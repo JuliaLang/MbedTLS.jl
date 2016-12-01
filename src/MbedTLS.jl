@@ -33,15 +33,11 @@ export
     Entropy,
     CRT
 
-using Compat
-import Compat: String
 import Base: show
 
-if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
-    include(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
-else
-    error("MbedTLS not properly installed. Please run Pkg.build(\"MbedTLS\")")
-end
+const MBED_TLS = "libmbedtls"
+const MBED_CRYPTO = "libmbedcrypto"
+const MBED_X509 = "libmbedx509"
 
 const MBED_SUCCESS = Cint(0)
 

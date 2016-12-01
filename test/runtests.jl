@@ -1,7 +1,4 @@
-using MbedTLS
-using Compat
-import Compat: String
-using Base.Test
+using MbedTLS, Base.Test
 
 # Message digests
 @test digest(MD_SHA256, "test", "secret") ==
