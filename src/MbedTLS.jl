@@ -56,11 +56,33 @@ include("pk.jl")
 include("x509_crt.jl")
 include("ssl.jl")
 
-
 function __init__()
     __ctr_drbg__init__()
     __sslinit__()
     __entropyinit__()
 end
+
+# using TransportLayerSecurity
+
+# already defined SSLConfig and SSLContext types in ssl.jl
+function SSLConfig(cert_file, key_file)
+    ssl_cert = MbedTLS.crt_parse_file(cert_file)
+    key = MbedTLS.parse_keyfile(key_file)
+    conf = MbedTLS.SSLConfig()
+    entropy = MbedTLS.Entropy()
+    rng = MbedTLS.CtrDrbg()
+    MbedTLS.config_defaults!(conf, endpoint=MbedTLS.MBEDTLS_SSL_IS_SERVER)
+    MbedTLS.seed!(rng, entropy)
+    MbedTLS.rng!(conf, rng)
+    MbedTLS.own_cert!(conf, ssl_cert, key)
+    MbedTLS.dbg!(conf, (level, filename, number, msg)->begin
+        warn("MbedTLS emitted debug info: $msg in $filename:$number")
+    end)
+    return conf
+end
+
+# already defined setup! in ssl.jl
+associate!(tls::SSLContext, tcp::TCPSocket) = set_bio!(tls, tcp)
+handshake!(tls::SSLContext) = handshake(tls)
 
 end # module
