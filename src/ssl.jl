@@ -240,8 +240,12 @@ function get_peer_cert(ctx::SSLContext)
 end
 
 function get_version(ctx::SSLContext)
-    data = ccall((:mbedtls_ssl_get_version, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
-    return unsafe_string(data)
+    if isdefined(ctx, :config)
+        data = ccall((:mbedtls_ssl_get_version, MBED_TLS), Ptr{UInt8}, (Ptr{Void},), ctx.data)
+        return unsafe_string(data)
+    else
+        throw(ArgumentError("`ctx` hasn't been initialized with an MbedTLS.SSLConfig; run `MbedTLS.setup!(ctx, conf)`"))
+    end
 end
 
 function get_ciphersuite(ctx::SSLContext)
