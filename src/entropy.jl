@@ -47,5 +47,5 @@ end
 
 function update_manual(ctx::Entropy, data::Vector{UInt8})
     @err_check ccall((:mbedtls_entropy_update_manual, MBED_CRYPTO), Cint,
-      (Ptr{Void}, Ptr{Void}, Csize_t), ctx.data, length(data))
+      (Ptr{Void}, Ptr{Void}, Csize_t), ctx.data, pointer(data), length(data))
 end
