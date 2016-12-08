@@ -1,6 +1,6 @@
 macro err_check(expr)
     quote
-        ret = $expr
+        ret = $(esc(expr))
         ret == 0 || mbed_err(ret)
         ret
     end
