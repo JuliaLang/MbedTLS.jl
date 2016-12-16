@@ -35,9 +35,15 @@ export
 
 import Base: show
 
-const MBED_TLS = "libmbedtls"
-const MBED_CRYPTO = "libmbedcrypto"
-const MBED_X509 = "libmbedx509"
+if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
+   Libdl.dlopen_e("libmbedcrypto") != C_NULL &&
+   Libdl.dlopen_e("libmbedx509")   != C_NULL
+    const MBED_TLS = "libmbedtls"
+    const MBED_CRYPTO = "libmbedcrypto"
+    const MBED_X509 = "libmbedx509"
+else
+    include(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
+end
 
 const MBED_SUCCESS = Cint(0)
 
@@ -75,6 +81,26 @@ function SSLConfig(cert_file, key_file)
         warn("MbedTLS emitted debug info: $msg in $filename:$number")
     end)
     return conf
+end
+
+function tls_dbg(level, filename, number, msg)
+    warn("MbedTLS emitted debug info: $msg in $filename:$number")
+end
+
+function SSLConfig(verify::Bool)
+    conf = MbedTLS.SSLConfig()
+    MbedTLS.config_defaults!(conf)
+
+    entropy = MbedTLS.Entropy()
+    rng = MbedTLS.CtrDrbg()
+    MbedTLS.seed!(rng, entropy)
+    MbedTLS.rng!(conf, rng)
+
+    MbedTLS.authmode!(conf,
+      verify ? MbedTLS.MBEDTLS_SSL_VERIFY_REQUIRED : MbedTLS.MBEDTLS_SSL_VERIFY_NONE)
+    MbedTLS.dbg!(conf, tls_dbg)
+    MbedTLS.ca_chain!(conf)
+    conf
 end
 
 # already defined setup! in ssl.jl
