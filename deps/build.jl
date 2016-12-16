@@ -19,8 +19,20 @@ if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
    Libdl.dlopen_e("libmbedx509")   != C_NULL &&
    validate_mbed("", Libdl.dlopen_e("libmbedcrypto")) &&
    get(ENV, "FORCE_BUILD", "") != "true"
+   println("Using system libraries...")
+   open("deps.jl", "w") do f
+       write(f,
+"""
+const MBED_TLS = "libmbedtls"
+const MBED_CRYPTO = "libmbedcrypto"
+const MBED_X509 = "libmbedx509"
+""")
+   end
    exit()
 end
+
+println("Manual build...")
+isfile("deps.jl") && rm("deps.jl")
 
 using BinDeps
 @BinDeps.setup

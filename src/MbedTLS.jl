@@ -35,15 +35,7 @@ export
 
 import Base: show
 
-if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
-   Libdl.dlopen_e("libmbedcrypto") != C_NULL &&
-   Libdl.dlopen_e("libmbedx509")   != C_NULL
-    const MBED_TLS = "libmbedtls"
-    const MBED_CRYPTO = "libmbedcrypto"
-    const MBED_X509 = "libmbedx509"
-else
-    include(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
-end
+include(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
 
 const MBED_SUCCESS = Cint(0)
 
