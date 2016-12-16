@@ -1,14 +1,3 @@
-
-if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
-   Libdl.dlopen_e("libmbedcrypto") != C_NULL &&
-   Libdl.dlopen_e("libmbedx509")   != C_NULL &&
-   get(ENV, "FORCE_BUILD", "") != "true"
-   exit()
-end
-
-using BinDeps
-@BinDeps.setup
-
 function validate_mbed(name, handle)
     try
         get_version = Libdl.dlsym(handle, :mbedtls_version_get_string)
@@ -21,6 +10,20 @@ function validate_mbed(name, handle)
         false
     end
 end
+
+# if we detect correctly-versioned shared libraries on the system
+# (which should be the case with normal julia 0.5 installations)
+# we don't need to build anything
+if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
+   Libdl.dlopen_e("libmbedcrypto") != C_NULL &&
+   Libdl.dlopen_e("libmbedx509")   != C_NULL &&
+   validate_mbed("", Libdl.dlopen_e("libmbedcrypto")) &&
+   get(ENV, "FORCE_BUILD", "") != "true"
+   exit()
+end
+
+using BinDeps
+@BinDeps.setup
 
 mbed = library_dependency("libmbedtls", aliases=["libmbedtls", "libmbedtls.2.1.1"])
 mbed_crypto = library_dependency("libmbedcrypto", aliases=["libmbedcrypto", "libmbedcrypto.2.1.1"], validate=validate_mbed)
