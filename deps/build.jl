@@ -1,9 +1,12 @@
-using BinDeps
-if Libdl.dlopen_e("libmbedtls")    == C_NULL ||
-   Libdl.dlopen_e("libmbedcrypto") == C_NULL ||
-   Libdl.dlopen_e("libmbedx509")   == C_NULL ||
-   ENV["FORCE_BUILD"] == "true"
 
+if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
+   Libdl.dlopen_e("libmbedcrypto") != C_NULL &&
+   Libdl.dlopen_e("libmbedx509")   != C_NULL &&
+   get(ENV, "FORCE_BUILD", "") != "true"
+   exit()
+end
+
+using BinDeps
 @BinDeps.setup
 
 function validate_mbed(name, handle)
@@ -76,4 +79,3 @@ end
 @BinDeps.install Dict("libmbedtls"=>"MBED_TLS",
                       "libmbedcrypto"=>"MBED_CRYPTO",
                       "libmbedx509"=>"MBED_X509")
-end # if
