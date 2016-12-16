@@ -1,9 +1,8 @@
+using BinDeps
 if Libdl.dlopen_e("libmbedtls")    == C_NULL ||
    Libdl.dlopen_e("libmbedcrypto") == C_NULL ||
    Libdl.dlopen_e("libmbedx509")   == C_NULL ||
    ENV["FORCE_BUILD"] == "true"
-
-using BinDeps
 
 @BinDeps.setup
 
