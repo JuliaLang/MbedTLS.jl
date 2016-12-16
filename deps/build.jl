@@ -1,5 +1,3 @@
-fb = ENV["FORCE_BUILD"]
-println("typeof(FORCE_BUILD) = $(typeof(fb)) and fb = $fb")
 if Libdl.dlopen_e("libmbedtls")    == C_NULL ||
    Libdl.dlopen_e("libmbedcrypto") == C_NULL ||
    Libdl.dlopen_e("libmbedx509")   == C_NULL ||
