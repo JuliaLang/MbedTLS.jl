@@ -27,7 +27,7 @@ if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
    validate_mbed("", Libdl.dlopen_e("libmbedcrypto")) &&
    get(ENV, "FORCE_BUILD", "") != "true"
    println("Using system libraries...")
-   if !isfile("deps.jl") && readstring("deps.jl") != systemlibs
+   if !isfile("deps.jl") || readstring("deps.jl") != systemlibs
        open("deps.jl", "w") do f
            write(f, systemlibs)
        end
