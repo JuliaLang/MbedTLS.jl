@@ -14,6 +14,13 @@ end
 # if we detect correctly-versioned shared libraries on the system
 # (which should be the case with normal julia 0.5 installations)
 # we don't need to build anything
+systemlibs =
+"""
+const MBED_TLS = "libmbedtls"
+const MBED_CRYPTO = "libmbedcrypto"
+const MBED_X509 = "libmbedx509"
+"""
+
 if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
    Libdl.dlopen_e("libmbedcrypto") != C_NULL &&
    Libdl.dlopen_e("libmbedx509")   != C_NULL &&
@@ -21,18 +28,15 @@ if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
    get(ENV, "FORCE_BUILD", "") != "true"
    println("Using system libraries...")
    open("deps.jl", "w") do f
-       write(f,
-"""
-const MBED_TLS = "libmbedtls"
-const MBED_CRYPTO = "libmbedcrypto"
-const MBED_X509 = "libmbedx509"
-""")
+       write(f, systemlibs)
    end
    exit()
 end
 
 println("Manual build...")
-isfile("deps.jl") && rm("deps.jl")
+# If we somehow already have a deps from system-libraries, but are now manually building
+# make sure we delete the old deps.jl
+isfile("deps.jl") && readstring("deps.jl") == systemlibs && rm("deps.jl")
 
 using BinDeps
 @BinDeps.setup
