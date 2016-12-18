@@ -268,5 +268,5 @@ function __sslinit__()
     global const c_recv = cfunction(f_recv, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
     global const c_dbg = cfunction(f_dbg, Void,
         (Ptr{Void}, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
-    global const TRUSTED_CERT_FILE = joinpath(dirname(@__FILE__), "../test/cacert.pem")
+    global const TRUSTED_CERT_FILE = joinpath(dirname(@__FILE__), "../deps/cacert.pem")
 end
