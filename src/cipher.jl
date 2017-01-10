@@ -192,7 +192,7 @@ function get_key_bitlen(cipher::Cipher)
 end
 
 tobytes(x::Vector{UInt8}) = x
-tobytes(x) = String(x).data
+tobytes(x) = Vector{UInt8}(x)
 
 function set_key!(cipher::Cipher, key, op::Operation)
     key_b = tobytes(key)

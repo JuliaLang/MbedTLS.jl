@@ -106,6 +106,7 @@ let
     end
 
     MbedTLS.dbg!(conf, show_debug)
+    MbedTLS.set_dbg_level(MbedTLS.DebugThreshold(1))
 
     MbedTLS.ca_chain!(conf)
 
@@ -148,6 +149,7 @@ let
     end
 
     MbedTLS.dbg!(conf, show_debug)
+    MbedTLS.set_dbg_level(MbedTLS.DebugThreshold(1))
 
     MbedTLS.ca_chain!(conf)
 
@@ -210,7 +212,7 @@ let
     write(md, UInt8['M', 'b', 'e', 'd'])
     write(md, reinterpret(UInt32, UInt8['T', 'L', 'S', '.'])[])
     write(md, reinterpret(UInt16, UInt8['j','l']))
-    @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,"MbedTLS.jl".data)
+    @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,Vector{UInt8}("MbedTLS.jl"))
 
     # Test reset functionality
     md = MbedTLS.MD(MbedTLS.MD_SHA256, "passcode")
