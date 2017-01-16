@@ -118,13 +118,26 @@ end
 
 function f_dbg(c_ctx, level, filename, number, msg)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    jl_ctx(level, String(filename), number, String(msg))
+    jl_ctx(level, unsafe_string(filename), number, unsafe_string(msg))
     nothing
 end
 
 function dbg!(conf::SSLConfig, f)
     conf.dbg = f
     dbg!(conf, c_dbg, pointer_from_objref(f))
+    nothing
+end
+
+@enum(DebugThreshold,
+    NONE = 0,
+    ERROR,
+    STATE_CHANGE,
+    INFO,
+    VERBOSE)
+
+function set_dbg_level(level)
+    ccall((:mbedtls_debug_set_threshold, MBED_TLS), Void,
+        (Cint,), Cint(level))
     nothing
 end
 
