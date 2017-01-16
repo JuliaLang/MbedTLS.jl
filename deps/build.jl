@@ -38,14 +38,13 @@ if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
 end
 
 using BinDeps
+@BinDeps.setup
 
 if need_to_build_manually
     println("Manual build...")
     # If we somehow already have a deps from system-libraries, but are now manually building
     # make sure we delete the old deps.jl
     isfile("deps.jl") && readstring("deps.jl") == systemlibs && rm("deps.jl")
-
-    @BinDeps.setup
 
     mbed = library_dependency("libmbedtls", aliases=["libmbedtls", "libmbedtls.2.1.1"])
     mbed_crypto = library_dependency("libmbedcrypto", aliases=["libmbedcrypto", "libmbedcrypto.2.1.1"], validate=validate_mbed)
