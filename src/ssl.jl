@@ -20,6 +20,8 @@ type SSLConfig
     end
 end
 
+Base.show(io::IO, c::SSLConfig) = print(io, "MbedTLS.SSLConfig()")
+
 type SSLContext <: IO
     data::Ptr{Void}
     config::SSLConfig
