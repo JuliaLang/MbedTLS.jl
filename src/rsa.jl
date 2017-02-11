@@ -37,7 +37,7 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
     # Export from GMP
     size = ndigits(b, 2)
     nbytes = div(size+8-1,8)
-    data = Array(UInt8, nbytes)
+    data = Vector{UInt8}(nbytes)
     count = Ref{Csize_t}(0)
     ccall((:__gmpz_export,:libgmp), Ptr{Void},
             (Ptr{Void}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Ptr{BigInt}),

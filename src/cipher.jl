@@ -279,7 +279,7 @@ function crypt(cipher_info, op::Operation, key, iv, msg)
     buf = tobytes(msg)
     cipher = Cipher(cipher_info)
     set_key!(cipher, key, op)
-    buf_out = Array(UInt8, sizeof(buf) + max_block_size)
+    buf_out = Vector{UInt8}(sizeof(buf) + max_block_size)
     olen = crypt!(cipher, iv, buf, buf_out)
     resize!(buf_out, olen)
     buf_out
