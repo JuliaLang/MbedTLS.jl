@@ -19,8 +19,8 @@ type MD{IsHMAC} <: IO
     data::Ptr{Void}
     info::MDInfo
 
-    function MD()
-        ctx = new()
+    function (::Type{MD{IsHMAC}}){IsHMAC}()
+        ctx = new{IsHMAC}()
         ctx.data = Libc.malloc(50)  # 24
         ccall((:mbedtls_md_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
         finalizer(ctx, ctx->begin
@@ -156,7 +156,7 @@ function finish!(ctx::MD{true}, buf)
 end
 
 function finish!(ctx::MD)
-    buf = Array(UInt8, get_size(ctx))
+    buf = Vector{UInt8}(get_size(ctx))
     finish!(ctx, buf)
     buf
 end
@@ -195,7 +195,7 @@ It is the user's responsibility to ensure that buffer is long enough to contain 
 function digest! end
 
 function digest(kind::MDKind, msg)
-    buf = Array(UInt8, get_size(kind))
+    buf = Vector{UInt8}(get_size(kind))
     digest!(kind, msg, buf)
     buf
 end
@@ -209,7 +209,7 @@ function digest!(kind::MDKind, msg, key, buf)
 end
 
 function digest(kind::MDKind, msg, key)
-    buf = Array(UInt8, get_size(kind))
+    buf = Vector{UInt8}(get_size(kind))
     digest!(kind, msg, key, buf)
     buf
 end

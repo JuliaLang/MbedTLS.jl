@@ -167,7 +167,7 @@ let
     key = MbedTLS.parse_keyfile("key.pem")
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
-    output = Array(UInt8, 256)
+    output = Vector{UInt8}(256)
     @test sizeof(output) == MbedTLS.sign!(key, MD_SHA1,
         MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), output, MersenneTwister(0))
     verify_key_pem("MbedTLS.jl", output)
