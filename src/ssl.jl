@@ -224,7 +224,7 @@ function Base.readavailable(ctx::SSLContext)
     b = IOBuffer()
     write(b, read(ctx, 1))
     write(b, read(ctx, nb_available(ctx)))
-    return takebuf_array(b)
+    return take!(b)
 end
 
 function Base.eof(ctx::SSLContext)
