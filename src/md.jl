@@ -49,7 +49,7 @@ end
 function get_name(info::MDInfo)
     ret = ccall((:mbedtls_md_get_name, MBED_CRYPTO), Ptr{UInt8},
         (Ptr{Void},), info.data)
-    String(ret)
+    unsafe_string(ret)
 end
 
 get_name(md::MD) = get_name(md.info)
