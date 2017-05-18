@@ -210,8 +210,12 @@ end
 let
     md = MbedTLS.MD(MD_SHA1)
     write(md, UInt8['M', 'b', 'e', 'd'])
-    write(md, reinterpret(UInt32, UInt8['T', 'L', 'S', '.'])[])
-    write(md, reinterpret(UInt16, UInt8['j','l']))
+    a32 = Vector{UInt32}(1)
+    reinterpret(UInt8, a32) .= UInt8['T', 'L', 'S', '.']
+    write(md, a32[])
+    a16 = Vector{UInt16}(1)
+    reinterpret(UInt8, a16) .= UInt8['j', 'l']
+    write(md, a16)
     @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,Vector{UInt8}("MbedTLS.jl"))
 
     # Test reset functionality
