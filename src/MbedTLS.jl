@@ -57,6 +57,7 @@ function __init__()
     __sslinit__()
     __entropyinit__()
 end
+__init__()
 
 # using TransportLayerSecurity
 

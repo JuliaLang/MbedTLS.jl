@@ -77,7 +77,7 @@ function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; usin
     @err_check ccall((:mbedtls_rsa_pkcs1_verify, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
         ctx.data,
-        rng == nothing ? C_NULL : c_rng,
+        rng == nothing ? C_NULL : c_rng[],
         rng == nothing ? C_NULL : pointer_from_objref(rng),
         using_public ? 0 : 1,
         hash_alg, sizeof(hash), hash, signature)
@@ -94,7 +94,7 @@ end
 
 function gen_key(rng::AbstractRNG, nbits=2048, exponent=65537)
     ctx = RSA()
-    gen_key!(ctx, c_rng, pointer_from_objref(rng), nbits, exponent)
+    gen_key!(ctx, c_rng[], pointer_from_objref(rng), nbits, exponent)
     ctx
 end
 
@@ -112,5 +112,5 @@ function private(ctx::RSA, f_rng, p_rng, input, output)
 end
 
 function private(ctx::RSA, rng::AbstractRNG, input, output)
-    private(ctx, c_rng, pointer_from_objref(rng), input, output)
+    private(ctx, c_rng[], pointer_from_objref(rng), input, output)
 end

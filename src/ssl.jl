@@ -62,10 +62,10 @@ end
 
 function rng!(config::SSLConfig, rng::AbstractRNG)
     config.rng = rng
-    rng!(config, c_rng, pointer_from_objref(rng))
+    rng!(config, c_rng[], pointer_from_objref(rng))
 end
 
-function ca_chain!(config::SSLConfig, chain=crt_parse_file(TRUSTED_CERT_FILE))
+function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem")))
     config.chain = chain
     ccall((:mbedtls_ssl_conf_ca_chain, MBED_TLS), Void,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}),
@@ -108,7 +108,7 @@ end
 
 function set_bio!{T<:IO}(ssl_ctx::SSLContext, jl_ctx::T)
     ssl_ctx.bio = jl_ctx
-    set_bio!(ssl_ctx, pointer_from_objref(jl_ctx), c_send, c_recv)
+    set_bio!(ssl_ctx, pointer_from_objref(jl_ctx), c_send[], c_recv[])
     nothing
 end
 
@@ -126,7 +126,7 @@ end
 
 function dbg!(conf::SSLConfig, f)
     conf.dbg = f
-    dbg!(conf, c_dbg, pointer_from_objref(f))
+    dbg!(conf, c_dbg[], pointer_from_objref(f))
     nothing
 end
 
@@ -278,10 +278,12 @@ function hostname!(ctx::SSLContext, hostname)
       (Ptr{Void}, Cstring), ctx.data, hostname)
 end
 
+const c_send = Ref{Ptr{Void}}(C_NULL)
+const c_recv = Ref{Ptr{Void}}(C_NULL)
+const c_dbg = Ref{Ptr{Void}}(C_NULL)
 function __sslinit__()
-    global const c_send = cfunction(f_send, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
-    global const c_recv = cfunction(f_recv, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
-    global const c_dbg = cfunction(f_dbg, Void,
+    c_send[] = cfunction(f_send, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
+    c_recv[] = cfunction(f_recv, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
+    c_dbg[] = cfunction(f_dbg, Void,
         (Ptr{Void}, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
-    global const TRUSTED_CERT_FILE = joinpath(dirname(@__FILE__), "../deps/cacert.pem")
 end

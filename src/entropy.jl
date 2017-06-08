@@ -33,11 +33,12 @@ end
 
 function add_source!(ctx::Entropy, f, threshold, strong)
     push!(ctx.sources, f)
-    add_source!(ctx, c_entropy, pointer_from_objref(f), threshold, strong ? 1 : 0)
+    add_source!(ctx, c_entropy[], pointer_from_objref(f), threshold, strong ? 1 : 0)
 end
 
+const c_entropy = Ref{Ptr{Void}}(C_NULL)
 function __entropyinit__()
-    global const c_entropy = cfunction(jl_entropy, Cint, (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}))
+    c_entropy[] = cfunction(jl_entropy, Cint, (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}))
 end
 
 function gather(ctx::Entropy)
