@@ -48,6 +48,7 @@ function Base.rand(rng::CtrDrbg, size::Integer)
     rand!(rng, buf)
 end
 
+const c_rng = Ref{Ptr{Void}}(C_NULL)
 function __ctr_drbg__init__()
-    const global c_rng=cfunction(f_rng, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
+    c_rng[] = cfunction(f_rng, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
 end
