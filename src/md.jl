@@ -19,7 +19,7 @@ mutable struct MD{IsHMAC} <: IO
     data::Ptr{Void}
     info::MDInfo
 
-    function (::Type{MD{IsHMAC}})() where IsHMAC
+    function MD{IsHMAC}() where IsHMAC
         ctx = new{IsHMAC}()
         ctx.data = Libc.malloc(50)  # 24
         ccall((:mbedtls_md_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
