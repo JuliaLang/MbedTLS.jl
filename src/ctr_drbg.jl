@@ -1,4 +1,4 @@
-type CtrDrbg  <: AbstractRNG
+mutable struct CtrDrbg  <: AbstractRNG
     data::Ptr{Void}
     entropy::Nullable{Entropy}
 

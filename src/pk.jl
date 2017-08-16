@@ -1,4 +1,4 @@
-type PKContext
+mutable struct PKContext
     data::Ptr{Void}
 
     function PKContext()

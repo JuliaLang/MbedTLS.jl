@@ -6,7 +6,7 @@ macro err_check(expr)
     end
 end
 
-immutable MbedException <: Exception
+struct MbedException <: Exception
     ret::Cint
 end
 
