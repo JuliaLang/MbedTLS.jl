@@ -83,11 +83,11 @@
     DECRYPT = 0,
     ENCRYPT)
 
-type CipherInfo
+mutable struct CipherInfo
     data::Ptr{Void}
 end
 
-type Cipher
+mutable struct Cipher
     data::Ptr{Void}
 
     function Cipher()

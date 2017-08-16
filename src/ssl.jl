@@ -1,4 +1,4 @@
-type SSLConfig
+mutable struct SSLConfig
     data::Ptr{Void}
     rng
     chain::CRT
@@ -22,7 +22,7 @@ end
 
 Base.show(io::IO, c::SSLConfig) = print(io, "MbedTLS.SSLConfig()")
 
-type SSLContext <: IO
+mutable struct SSLContext <: IO
     data::Ptr{Void}
     config::SSLConfig
     isopen::Bool
@@ -106,7 +106,7 @@ function f_recv(c_ctx, c_msg, sz)
     return Cint(n)
 end
 
-function set_bio!{T<:IO}(ssl_ctx::SSLContext, jl_ctx::T)
+function set_bio!(ssl_ctx::SSLContext, jl_ctx::T) where {T<:IO}
     ssl_ctx.bio = jl_ctx
     set_bio!(ssl_ctx, pointer_from_objref(jl_ctx), c_send[], c_recv[])
     nothing
@@ -163,17 +163,9 @@ function alpn_proto(ctx::SSLContext)
     unsafe_string(rv)
 end
 
-if Base.VERSION < v"0.5.0-dev+2301"
-    import Base: read, write
-    const unsafe_read = read
-    const unsafe_write = write
-    @noinline Base.write(ctx::SSLContext, msg::Base.RefValue{UInt8}) = write(ctx, Base.unsafe_convert(Ptr{UInt8}, msg), UInt(sizeof(UInt8)))
-    # the @eval macros are also necessary for this Compat layer to get the symbol name correct for the method
-else
-    import Base: unsafe_read, unsafe_write
-end
+import Base: unsafe_read, unsafe_write
 
-@eval function $(Symbol(unsafe_write))(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
+function Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
     nw = 0
     while nw < N
         ret = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
@@ -188,7 +180,7 @@ end
 
 Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 
-@eval function $(Symbol(unsafe_read))(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
+function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
     nread::UInt = 0
     while nread < nbytes
         n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,

@@ -1,4 +1,4 @@
-type Entropy
+mutable struct Entropy
     data::Ptr{Void}
     sources::Vector{Any}
 

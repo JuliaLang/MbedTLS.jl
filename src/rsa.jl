@@ -1,10 +1,10 @@
-immutable mbedtls_mpi
+struct mbedtls_mpi
     s::Cint
     n::Csize_t
     p::Ptr{Cuint}
 end
 
-immutable mbedtls_rsa_context
+struct mbedtls_rsa_context
     ver::Cint
     len::Csize_t
     N::mbedtls_mpi
@@ -16,7 +16,7 @@ immutable mbedtls_rsa_context
     # are not required for this wrapper
 end
 
-type RSA
+mutable struct RSA
     data::Ptr{mbedtls_rsa_context}
 
     function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MD_MD5)

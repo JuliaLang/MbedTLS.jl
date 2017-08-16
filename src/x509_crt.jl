@@ -1,4 +1,4 @@
-type CRT
+mutable struct CRT
     data::Ptr{Void}
 
     function CRT()
@@ -31,9 +31,9 @@ function crt_parse!(chain, buf::String)
     chain
 end
 
-crt_parse!(chain, buf::IOStream) = crt_parse!(chain, readstring(buf))
+crt_parse!(chain, buf::IOStream) = crt_parse!(chain, String(read(buf)))
 
-crt_parse_file(path) = crt_parse(readstring(path))
+crt_parse_file(path) = crt_parse(String(read(path)))
 
 function crt_parse(buf)
     crt = CRT()
