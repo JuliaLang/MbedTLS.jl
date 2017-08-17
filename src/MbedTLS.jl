@@ -1,8 +1,6 @@
 __precompile__(true)
 module MbedTLS
 
-using Compat
-
 export
 # Message digests
     MD_NONE,

@@ -275,7 +275,7 @@ end
 crypt!(cipher::Cipher, buf_in, buf_out) = crypt!(cipher, C_NULL, buf_in, buf_out)
 
 function crypt(cipher_info, op::Operation, key, iv, msg)
-    const max_block_size = 256  # todo: obtain this dynamically from mbedtls
+    max_block_size = 256  # todo: obtain this dynamically from mbedtls
     buf = tobytes(msg)
     cipher = Cipher(cipher_info)
     set_key!(cipher, key, op)
