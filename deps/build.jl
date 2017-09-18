@@ -1,3 +1,5 @@
+using Compat
+
 need_to_build_manually = true
 
 function validate_mbed(name, handle)
@@ -29,7 +31,7 @@ if Libdl.dlopen_e("libmbedtls")    != C_NULL &&
    validate_mbed("", Libdl.dlopen_e("libmbedcrypto")) &&
    get(ENV, "FORCE_BUILD", "") != "true"
    println("Using system libraries...")
-   if !isfile("deps.jl") || readstring("deps.jl") != systemlibs
+   if !isfile("deps.jl") || read("deps.jl", String) != systemlibs
        open("deps.jl", "w") do f
            write(f, systemlibs)
        end
@@ -44,7 +46,7 @@ if need_to_build_manually
     println("Manual build...")
     # If we somehow already have a deps from system-libraries, but are now manually building
     # make sure we delete the old deps.jl
-    isfile("deps.jl") && readstring("deps.jl") == systemlibs && rm("deps.jl")
+    isfile("deps.jl") && read("deps.jl", String) == systemlibs && rm("deps.jl")
 
     mbed = library_dependency("libmbedtls", aliases=["libmbedtls", "libmbedtls.2.1.1"])
     mbed_crypto = library_dependency("libmbedcrypto", aliases=["libmbedcrypto", "libmbedcrypto.2.1.1"], validate=validate_mbed)
@@ -65,7 +67,7 @@ if need_to_build_manually
             mbed_all, unpacked_dir="mbedtls-2.1.1",
             SHA = srcsha)
 
-    if is_unix()
+    if Compat.Sys.isunix()
         mbed_dir = joinpath(BinDeps.depsdir(mbed), "src", "mbedtls-2.1.1")
         provides(BuildProcess,
             (@build_steps begin
@@ -81,15 +83,15 @@ if need_to_build_manually
             end), mbed_all, installed_libpath=joinpath(mbed_dir, "library"))
     end
 
-    if is_apple()
+    if Compat.Sys.isapple()
         if Pkg.installed("Homebrew") === nothing
-    		error("Homebrew package not installed, please run Pkg.add(\"Homebrew\")")
-    	end
-    	using Homebrew
-    	provides(Homebrew.HB, "mbedtls", mbed_all)
+            error("Homebrew package not installed, please run Pkg.add(\"Homebrew\")")
+        end
+        using Homebrew
+        provides(Homebrew.HB, "mbedtls", mbed_all)
     end
 
-    if is_windows()
+    if Compat.Sys.iswindows()
         unpacked_dir = Int==Int32 ? "usr/bin32" : "usr/bin64"
         provides(
             Binaries,
