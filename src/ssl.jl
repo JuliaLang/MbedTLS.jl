@@ -274,8 +274,7 @@ const c_send = Ref{Ptr{Void}}(C_NULL)
 const c_recv = Ref{Ptr{Void}}(C_NULL)
 const c_dbg = Ref{Ptr{Void}}(C_NULL)
 function __sslinit__()
-    c_send[] = cfunction(f_send, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
-    c_recv[] = cfunction(f_recv, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
-    c_dbg[] = cfunction(f_dbg, Void,
-        (Ptr{Void}, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
+    c_send[] = cfunction(f_send, Cint, Tuple{Ptr{Void}, Ptr{UInt8}, Csize_t})
+    c_recv[] = cfunction(f_recv, Cint, Tuple{Ptr{Void}, Ptr{UInt8}, Csize_t})
+    c_dbg[] = cfunction(f_dbg, Void, Tuple{Ptr{Void}, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}})
 end

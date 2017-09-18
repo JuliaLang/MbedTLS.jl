@@ -39,9 +39,10 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
     nbytes = div(size+8-1,8)
     data = Vector{UInt8}(nbytes)
     count = Ref{Csize_t}(0)
+    # TODO Replace `Any` with `Ref{BigInt}` when 0.6 support is dropped.
     ccall((:__gmpz_export,:libgmp), Ptr{Void},
-            (Ptr{Void}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Ptr{BigInt}),
-            data, count, 1, 1, 1, 0, &b)
+            (Ptr{Void}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Any),
+            data, count, 1, 1, 1, 0, b)
     @assert count[] == nbytes
     # Import into mbedtls
     @err_check ccall((:mbedtls_mpi_read_binary, MBED_CRYPTO), Cint,

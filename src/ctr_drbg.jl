@@ -50,5 +50,5 @@ end
 
 const c_rng = Ref{Ptr{Void}}(C_NULL)
 function __ctr_drbg__init__()
-    c_rng[] = cfunction(f_rng, Cint, (Ptr{Void}, Ptr{UInt8}, Csize_t))
+    c_rng[] = cfunction(f_rng, Cint, Tuple{Ptr{Void}, Ptr{UInt8}, Csize_t})
 end
