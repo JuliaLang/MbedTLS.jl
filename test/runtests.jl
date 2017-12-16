@@ -1,4 +1,10 @@
-using MbedTLS, Base.Test
+using MbedTLS
+
+@static if VERSION < v"0.7.0-DEV.2005"
+    using Base.Test
+else
+    using Test
+end
 
 # Message digests
 @test digest(MD_SHA256, "test", "secret") ==
@@ -84,8 +90,8 @@ let
     sock = connect(testhost, 443)
     entropy = MbedTLS.Entropy()
 
-    rng = RandomDevice()
     function entropy_func(buf)
+        rng = RandomDevice()
         buf[:] = rand(rng, UInt8, length(buf))
         return length(buf)
     end
@@ -126,8 +132,8 @@ let
     sock = connect(testhost, 443)
     entropy = MbedTLS.Entropy()
 
-    rng = RandomDevice()
     function entropy_func(buf)
+        rng = RandomDevice()
         buf[:] = rand(rng, UInt8, length(buf))
         return length(buf)
     end
@@ -167,7 +173,7 @@ let
     key = MbedTLS.parse_keyfile("key.pem")
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
-    output = Vector{UInt8}(256)
+    output = fill(0x00, 256)
     @test sizeof(output) == MbedTLS.sign!(key, MD_SHA1,
         MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), output, MersenneTwister(0))
     verify_key_pem("MbedTLS.jl", output)
@@ -210,10 +216,10 @@ end
 let
     md = MbedTLS.MD(MD_SHA1)
     write(md, UInt8['M', 'b', 'e', 'd'])
-    a32 = Vector{UInt32}(1)
+    a32 = fill(UInt32(0), 1)
     reinterpret(UInt8, a32) .= UInt8['T', 'L', 'S', '.']
     write(md, a32[])
-    a16 = Vector{UInt16}(1)
+    a16 = fill(UInt16(0), 1)
     reinterpret(UInt8, a16) .= UInt8['j', 'l']
     write(md, a16)
     @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,Vector{UInt8}("MbedTLS.jl"))

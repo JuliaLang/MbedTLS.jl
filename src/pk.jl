@@ -7,11 +7,10 @@ mutable struct PKContext
 
         ccall((:mbedtls_pk_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
 
-        finalizer(ctx,ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_pk_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
-        end)
-
+        end, ctx)
         ctx
     end
 end
@@ -47,21 +46,23 @@ function parse_public_key!(ctx::PKContext, key)
         ctx.data, key_bs, sizeof(key_bs) + 1)
 end
 
-function parse_key!(ctx::PKContext, key, maybe_pw::Nullable = Nullable())
+@static if VERSION < v"0.7.0-DEV.3017"
+parse_key!(ctx::PKContext, key, maybe_pw::Nullable) = parse_key!(ctx, key, isnull(maybe_pw) ? nothing : get(maybe_pw))
+end
+
+function parse_key!(ctx::PKContext, key, maybe_pw = nothing)
     key_bs = String(key)
-    if isnull(maybe_pw)
+    if maybe_pw === nothing
         pw = C_NULL
         pw_size = 0
     else
-        pw = String(get(maybe_pw))
+        pw = String(maybe_pw)
         pw_size = sizeof(pw)  # Might be off-by-one
     end
     @err_check ccall((:mbedtls_pk_parse_key, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Cuchar}, Csize_t, Ptr{Cuchar}, Csize_t),
         ctx.data, key_bs, sizeof(key_bs) + 1, pw, pw_size)
 end
-
-parse_key!(ctx::PKContext, key, pw) = parse_key!(ctx, key, Nullable(pw))
 
 function bitlength(ctx::PKContext)
     sz = ccall((:mbedtls_pk_get_bitlen, MBED_CRYPTO), Csize_t,
@@ -99,7 +100,7 @@ end
 
 function sign(ctx::PKContext, hash_alg::MDKind, hash, rng)
     n = Int64(ceil(bitlength(ctx) / 8))
-    output = Vector{UInt8}(n)
+    output = @uninit Vector{UInt8}(uninitialized, n)
     @assert sign!(ctx, hash_alg, hash, output, rng) == n
     output
 end

@@ -5,7 +5,7 @@ need_to_build_manually = true
 function validate_mbed(name, handle)
     try
         get_version = Libdl.dlsym(handle, :mbedtls_version_get_string)
-        version_ptr = Vector{UInt8}(9)
+        version_ptr = fill(0x00, 9)
         ccall(get_version, Void, (Ptr{Void},), version_ptr)
         version = VersionNumber(unsafe_string(pointer(version_ptr)))
         version >= v"2.1.1"

@@ -11,11 +11,10 @@ mutable struct SSLConfig
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
         ccall((:mbedtls_ssl_config_init, MBED_TLS), Void, (Ptr{Void},), conf.data)
-        finalizer(conf, conf->begin
+        finalizer(conf->begin
             ccall((:mbedtls_ssl_config_free, MBED_TLS), Void, (Ptr{Void},), conf.data)
             Libc.free(conf.data)
-        end
-        )
+        end, conf)
         conf
     end
 end
@@ -32,11 +31,10 @@ mutable struct SSLContext <: IO
         ctx = new()
         ctx.data = Libc.malloc(1000)  # 488
         ccall((:mbedtls_ssl_init, MBED_TLS), Void, (Ptr{Void},), ctx.data)
-        finalizer(ctx, ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_ssl_free, MBED_TLS), Void, (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
-        end
-        )
+        end, ctx)
         ctx
     end
 end

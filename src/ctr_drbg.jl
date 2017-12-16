@@ -1,16 +1,15 @@
 mutable struct CtrDrbg  <: AbstractRNG
     data::Ptr{Void}
-    entropy::Nullable{Entropy}
+    entropy::Union{Void, Entropy}
 
     function CtrDrbg()
         ctx = new()
         ctx.data = Libc.malloc(1000)  # 344
         ccall((:mbedtls_ctr_drbg_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
-        finalizer(ctx, ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_ctr_drbg_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
-        end
-        )
+        end, ctx)
         ctx
     end
 
@@ -26,7 +25,7 @@ function f_rng(c_ctx, c_buf, sz)
 end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
-    rng.entropy = Nullable(entropy)
+    rng.entropy = entropy
     entropy_func = cglobal((:mbedtls_entropy_func, MBED_CRYPTO))
     @err_check ccall((:mbedtls_ctr_drbg_seed, MBED_CRYPTO), Cint,
         (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Void}, Csize_t),
@@ -44,7 +43,7 @@ function Base.rand!(rng::CtrDrbg, buf::Array)
 end
 
 function Base.rand(rng::CtrDrbg, size::Integer)
-    buf = Vector{UInt8}(size)
+    buf = @uninit Vector{UInt8}(uninitialized, size)
     rand!(rng, buf)
 end
 

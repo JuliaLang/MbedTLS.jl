@@ -96,11 +96,11 @@ mutable struct Cipher
         ccall((:mbedtls_cipher_init, MBED_CRYPTO), Void,
             (Ptr{Void},), ctx.data)
 
-        finalizer(ctx, ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_cipher_free, MBED_CRYPTO), Void,
                 (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
-        end)
+        end, ctx)
 
         ctx
     end
@@ -244,13 +244,14 @@ end
 
 function process_iv(iv, cipher)
     if isempty(iv)
-        process_iv(Nullable())
+        process_iv(nothing)
     else
         iv_b = tobytes(iv)
         iv_b, sizeof(iv_b)
     end
 end
 
+@static if VERSION < v"0.7.0-DEV.3017"
 function process_iv(iv::Nullable, cipher)
     if isnull(iv)  # Return a default IV
         # todo: Don't hard-code a block size (this assumes 128-bit, as for AES)
@@ -259,6 +260,13 @@ function process_iv(iv::Nullable, cipher)
     else
         process_iv(get(iv))
     end
+end
+end
+
+function process_iv(iv::Void, cipher)
+    # todo: Don't hard-code a block size (this assumes 128-bit, as for AES)
+    # todo: Think about what appropriate default (if any) should be used here
+    zeros(Int8, 16), 16
 end
 
 function crypt!(cipher::Cipher, iv, buf_in, buf_out)
@@ -279,7 +287,7 @@ function crypt(cipher_info, op::Operation, key, iv, msg)
     buf = tobytes(msg)
     cipher = Cipher(cipher_info)
     set_key!(cipher, key, op)
-    buf_out = Vector{UInt8}(sizeof(buf) + max_block_size)
+    buf_out = @uninit Vector{UInt8}(uninitialized, sizeof(buf) + max_block_size)
     olen = crypt!(cipher, iv, buf, buf_out)
     resize!(buf_out, olen)
     buf_out
@@ -306,7 +314,7 @@ cipher (eg, 16 bytes for AES). By default, it will be set to all zeros, which
 is not secure. For security reasons, it should be set to a different value for each
 encryption operation.
 """
-encrypt(cipher, key, msg, iv=Nullable()) = crypt(cipher, ENCRYPT, key, iv, msg)
+encrypt(cipher, key, msg, iv=nothing) = crypt(cipher, ENCRYPT, key, iv, msg)
 
 """
 `decrypt(cipher, key, msg, [iv]) -> Vector{UInt8}`
@@ -328,4 +336,4 @@ or be a `Vector{UInt8}`.
 cipher (eg, 16 bytes for AES) and correspond to the iv used by the encryptor.
 By default, it will be set to all zeros.
 """
-decrypt(cipher, key, msg, iv=Nullable()) = crypt(cipher, DECRYPT, key, iv, msg)
+decrypt(cipher, key, msg, iv=nothing) = crypt(cipher, DECRYPT, key, iv, msg)

@@ -25,10 +25,10 @@ mutable struct RSA
         ccall((:mbedtls_rsa_init, MBED_CRYPTO), Void,
             (Ptr{Void}, Cint, Cint),
             ctx.data, padding, hash_id)
-        finalizer(ctx, ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_rsa_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
-        end)
+        end, ctx)
         ctx
     end
 end
@@ -37,7 +37,7 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
     # Export from GMP
     size = ndigits(b, 2)
     nbytes = div(size+8-1,8)
-    data = Vector{UInt8}(nbytes)
+    data = @uninit Vector{UInt8}(uninitialized, nbytes)
     count = Ref{Csize_t}(0)
     # TODO Replace `Any` with `Ref{BigInt}` when 0.6 support is dropped.
     ccall((:__gmpz_export,:libgmp), Ptr{Void},

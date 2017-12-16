@@ -23,10 +23,10 @@ mutable struct MD{IsHMAC} <: IO
         ctx = new{IsHMAC}()
         ctx.data = Libc.malloc(50)  # 24
         ccall((:mbedtls_md_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
-        finalizer(ctx, ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_md_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
             Libc.free(ctx.data)
-        end)
+        end, ctx)
         ctx
     end
 end
@@ -156,7 +156,7 @@ function finish!(ctx::MD{true}, buf)
 end
 
 function finish!(ctx::MD)
-    buf = Vector{UInt8}(get_size(ctx))
+    buf = @uninit Vector{UInt8}(uninitialized, get_size(ctx))
     finish!(ctx, buf)
     buf
 end
@@ -195,7 +195,7 @@ It is the user's responsibility to ensure that buffer is long enough to contain 
 function digest! end
 
 function digest(kind::MDKind, msg)
-    buf = Vector{UInt8}(get_size(kind))
+    buf = @uninit Vector{UInt8}(uninitialized, get_size(kind))
     digest!(kind, msg, buf)
     buf
 end
@@ -209,7 +209,7 @@ function digest!(kind::MDKind, msg, key, buf)
 end
 
 function digest(kind::MDKind, msg, key)
-    buf = Vector{UInt8}(get_size(kind))
+    buf = @uninit Vector{UInt8}(uninitialized, get_size(kind))
     digest!(kind, msg, key, buf)
     buf
 end

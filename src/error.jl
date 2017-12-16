@@ -17,7 +17,7 @@ end
 mbed_err(ret) = throw(MbedException(ret))
 
 function strerror(ret, bufsize=1000)
-    buf = Vector{UInt8}(bufsize)
+    buf = @uninit Vector{UInt8}(uninitialized, bufsize)
     ccall((:mbedtls_strerror, MBED_CRYPTO), Cint,
         (Cint, Ptr{Void}, Csize_t),
         ret, buf, bufsize)

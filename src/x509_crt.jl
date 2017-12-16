@@ -5,10 +5,10 @@ mutable struct CRT
         c = new()
         c.data = Libc.malloc(1000)  # 552
         ccall((:mbedtls_x509_crt_init, MBED_X509), Void, (Ptr{Void},), c.data)
-        finalizer(c, c->begin
+        finalizer(c->begin
             ccall((:mbedtls_x509_crt_free, MBED_X509), Void, (Ptr{Void},), c.data)
             Libc.free(c.data)
-        end)
+        end, c)
         c
     end
 end
