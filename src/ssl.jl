@@ -206,23 +206,11 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt)
     return Int(nr::UInt)
 end
 
-function Base.readavailable(ctx::SSLContext)
-    # For unknown reasons, nb_available on SSLContext erroneously returns 0
-    # until `read` is called on the context. As a temporary hack, we read one
-    # byte from the SSL context to cause nb_available to be accurate.
-    # TODO: figure out and fix the root cause of this
-    b = IOBuffer()
-    write(b, read(ctx, 1))
-    write(b, read(ctx, nb_available(ctx)))
-    return take!(b)
-end
+Base.readavailable(ctx::SSLContext) = read(ctx, nb_available(ctx))
 
 function Base.eof(ctx::SSLContext)
-    # Not quite semantically correct, since nb_available might still be zero
-    # when this returns false (ie, the underlying socket has bytes available but not
-    # a complete record)
     nb_available(ctx)>0 && return false
-    return eof(ctx.bio)
+    return eof(ctx.bio) && nb_available(ctx) == 0
 end
 
 function Base.close(ctx::SSLContext)
@@ -259,6 +247,10 @@ function get_ciphersuite(ctx::SSLContext)
 end
 
 function Base.nb_available(ctx::SSLContext)
+    # First try to read from the socket and decrypt incoming data if possible.
+    # https://esp32.com/viewtopic.php?t=1101#p4884
+    ccall((:mbedtls_ssl_read, MBED_TLS), Cint, (Ptr{Void}, Ptr{Void}, Csize_t),
+                                                ctx.data,  C_NULL,    0)
     n = ccall((:mbedtls_ssl_get_bytes_avail, MBED_TLS), Csize_t, (Ptr{Void},), ctx.data)
     return Int(n)
 end
