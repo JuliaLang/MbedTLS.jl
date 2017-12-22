@@ -1,14 +1,14 @@
 mutable struct Entropy
-    data::Ptr{Void}
+    data::Ptr{Cvoid}
     sources::Vector{Any}
 
     function Entropy()
         ctx = new()
         ctx.data = Libc.malloc(100000)  # Exact byte count is 75088; playing it safe with some buffer
         ctx.sources = Any[]
-        ccall((:mbedtls_entropy_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
-        finalizer(ctx->begin
-            ccall((:mbedtls_entropy_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
+        ccall((:mbedtls_entropy_init, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
+        @compat finalizer(ctx->begin
+            ccall((:mbedtls_entropy_free, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
         ctx
@@ -17,7 +17,7 @@ end
 
 function add_source!(ctx::Entropy, f_source::Ptr, p_source::Ptr, threshold, strong)
     ret = ccall((:mbedtls_entropy_add_source, MBED_CRYPTO), Cint,
-      (Ptr{Void}, Ptr{Void}, Ptr{Void}, Csize_t, Cint),
+      (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Cint),
       ctx.data, f_source, p_source, threshold, strong)
     Int(ret)
 end
@@ -35,17 +35,17 @@ function add_source!(ctx::Entropy, f, threshold, strong)
     add_source!(ctx, c_entropy[], pointer_from_objref(f), threshold, strong ? 1 : 0)
 end
 
-const c_entropy = Ref{Ptr{Void}}(C_NULL)
+const c_entropy = Ref{Ptr{Cvoid}}(C_NULL)
 function __entropyinit__()
-    c_entropy[] = cfunction(jl_entropy, Cint, Tuple{Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}})
+    c_entropy[] = cfunction(jl_entropy, Cint, Tuple{Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}})
 end
 
 function gather(ctx::Entropy)
     @err_check ccall((:mbedtls_entropy_gather, MBED_CRYPTO), Cint,
-      (Ptr{Void},), ctx.data)
+      (Ptr{Cvoid},), ctx.data)
 end
 
 function update_manual(ctx::Entropy, data::Vector{UInt8})
     @err_check ccall((:mbedtls_entropy_update_manual, MBED_CRYPTO), Cint,
-      (Ptr{Void}, Ptr{Void}, Csize_t), ctx.data, pointer(data), length(data))
+      (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ctx.data, pointer(data), length(data))
 end

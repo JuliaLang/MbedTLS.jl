@@ -12,19 +12,19 @@
       MD_SHA)
 
 mutable struct MDInfo
-  data::Ptr{Void}
+  data::Ptr{Cvoid}
 end
 
 mutable struct MD{IsHMAC} <: IO
-    data::Ptr{Void}
+    data::Ptr{Cvoid}
     info::MDInfo
 
     function MD{IsHMAC}() where IsHMAC
         ctx = new{IsHMAC}()
         ctx.data = Libc.malloc(50)  # 24
-        ccall((:mbedtls_md_init, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
-        finalizer(ctx->begin
-            ccall((:mbedtls_md_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
+        ccall((:mbedtls_md_init, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
+        @compat finalizer(ctx->begin
+            ccall((:mbedtls_md_free, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
         ctx
@@ -32,7 +32,7 @@ mutable struct MD{IsHMAC} <: IO
 end
 
 function MDInfo(kind::MDKind)
-    ret = ccall((:mbedtls_md_info_from_type, MBED_CRYPTO), Ptr{Void},
+    ret = ccall((:mbedtls_md_info_from_type, MBED_CRYPTO), Ptr{Cvoid},
         (Cint,), Int(kind))
     if ret == C_NULL
         error("Could not find MD type for kind $kind")
@@ -41,14 +41,14 @@ function MDInfo(kind::MDKind)
 end
 
 function MDInfo(kind::AbstractString)
-    ret = ccall((:mbedtls_md_info_from_string, MBED_CRYPTO), Ptr{Void},
+    ret = ccall((:mbedtls_md_info_from_string, MBED_CRYPTO), Ptr{Cvoid},
         (Cstring,), String(kind))
     MDInfo(ret)
 end
 
 function get_name(info::MDInfo)
     ret = ccall((:mbedtls_md_get_name, MBED_CRYPTO), Ptr{UInt8},
-        (Ptr{Void},), info.data)
+        (Ptr{Cvoid},), info.data)
     unsafe_string(ret)
 end
 
@@ -70,10 +70,10 @@ function MD(kind::MDKind)
     ctx = MD{false}()
     ctx.info = MDInfo(kind)
     @err_check ccall((:mbedtls_md_setup, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Cint),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Cint),
         ctx.data, ctx.info.data, 0)
     @err_check ccall((:mbedtls_md_starts, MBED_CRYPTO), Cint,
-        (Ptr{Void},), ctx.data)
+        (Ptr{Cvoid},), ctx.data)
     ctx
 end
 
@@ -81,10 +81,10 @@ function MD(kind::MDKind, key)
     ctx = MD{true}()
     ctx.info = MDInfo(kind)
     @err_check ccall((:mbedtls_md_setup, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Cint),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Cint),
         ctx.data, ctx.info.data, 1)
     @err_check ccall((:mbedtls_md_hmac_starts, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         ctx.data, pointer(key), sizeof(key))
     ctx
 end
@@ -92,7 +92,7 @@ end
 function Base.copy(md::MD)
     new_md = MD()
     @err_check ccall((:mbedtls_md_clone, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}),
+        (Ptr{Cvoid}, Ptr{Cvoid}),
         new_md.data, md.data)
     new_md.info = md.info
     new_md
@@ -111,7 +111,7 @@ get_size(MD_SHA256) == 32
 """
 function get_size(info::MDInfo)
     ret = ccall((:mbedtls_md_get_size, MBED_CRYPTO), Cuchar,
-        (Ptr{Void},), info.data)
+        (Ptr{Cvoid},), info.data)
     Int(ret)
 end
 
@@ -120,13 +120,13 @@ get_size(kind::MDKind) = get_size(MDInfo(kind))
 
 function _write(ctx::MD{false}, buf, size)
     @err_check ccall((:mbedtls_md_update, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         ctx.data, buf, size)
 end
 
 function _write(ctx::MD{true}, buf, size)
     @err_check ccall((:mbedtls_md_hmac_update, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         ctx.data, buf, size)
 end
 
@@ -145,32 +145,32 @@ Base.write(ctx::MD, i::Int8) = _write(ctx, Ref(i), sizeof(i))
 
 function finish!(ctx::MD{false}, buf)
     @err_check ccall((:mbedtls_md_finish, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}),
+        (Ptr{Cvoid}, Ptr{Cvoid}),
         ctx.data, pointer(buf))
 end
 
 function finish!(ctx::MD{true}, buf)
     @err_check ccall((:mbedtls_md_hmac_finish, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}),
+        (Ptr{Cvoid}, Ptr{Cvoid}),
         ctx.data, pointer(buf))
 end
 
 function finish!(ctx::MD)
-    buf = @uninit Vector{UInt8}(uninitialized, get_size(ctx))
+    buf = Vector{UInt8}(uninitialized, get_size(ctx))
     finish!(ctx, buf)
     buf
 end
 
 function reset!(ctx::MD{true})
     @err_check ccall((:mbedtls_md_hmac_reset, MBED_CRYPTO), Cint,
-        (Ptr{Void},),
+        (Ptr{Cvoid},),
         ctx.data)
 end
 
 function digest!(kind::MDKind, msg, buf)
     msg_b = String(msg)
     @err_check ccall((:mbedtls_md, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}),
         MDInfo(kind).data, pointer(msg_b), sizeof(msg_b), pointer(buf))
 end
 
@@ -195,7 +195,7 @@ It is the user's responsibility to ensure that buffer is long enough to contain 
 function digest! end
 
 function digest(kind::MDKind, msg)
-    buf = @uninit Vector{UInt8}(uninitialized, get_size(kind))
+    buf = Vector{UInt8}(uninitialized, get_size(kind))
     digest!(kind, msg, buf)
     buf
 end
@@ -203,13 +203,13 @@ end
 function digest!(kind::MDKind, msg, key, buf)
     msg_b = String(msg)
     @err_check ccall((:mbedtls_md_hmac, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Csize_t, Ptr{Void}, Csize_t, Ptr{Void}),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}),
         MDInfo(kind).data, pointer(key), sizeof(key),
         pointer(msg_b), sizeof(msg_b), pointer(buf))
 end
 
 function digest(kind::MDKind, msg, key)
-    buf = @uninit Vector{UInt8}(uninitialized, get_size(kind))
+    buf = Vector{UInt8}(uninitialized, get_size(kind))
     digest!(kind, msg, key, buf)
     buf
 end

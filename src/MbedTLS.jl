@@ -1,17 +1,7 @@
 __precompile__(true)
 module MbedTLS
 
-macro uninit(expr)
-    if !isdefined(Base, :uninitialized)
-        splice!(expr.args, 2)
-    end
-    return esc(expr)
-end
-
-if VERSION < v"0.7.0-DEV.2562"
-    import Base: finalizer
-    finalizer(f::Function, o) = finalizer(o, f)
-end
+using Compat
 
 export
 # Message digests
