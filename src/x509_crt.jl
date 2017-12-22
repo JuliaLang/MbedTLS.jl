@@ -1,12 +1,12 @@
 mutable struct CRT
-    data::Ptr{Void}
+    data::Ptr{Cvoid}
 
     function CRT()
         c = new()
         c.data = Libc.malloc(1000)  # 552
-        ccall((:mbedtls_x509_crt_init, MBED_X509), Void, (Ptr{Void},), c.data)
-        finalizer(c->begin
-            ccall((:mbedtls_x509_crt_free, MBED_X509), Void, (Ptr{Void},), c.data)
+        ccall((:mbedtls_x509_crt_init, MBED_X509), Cvoid, (Ptr{Cvoid},), c.data)
+        @compat finalizer(c->begin
+            ccall((:mbedtls_x509_crt_free, MBED_X509), Cvoid, (Ptr{Cvoid},), c.data)
             Libc.free(c.data)
         end, c)
         c
@@ -18,14 +18,14 @@ show(io::IO, crt::CRT) = print(io, crt_info(crt))
 function crt_info(crt::CRT)
     buf = zeros(UInt8, 1000)
     ccall((:mbedtls_x509_crt_info, MBED_X509), Cint,
-        (Ptr{Void}, Csize_t, Cstring, Ptr{Void}),
+        (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
         buf, 1000, "", crt.data)
     unsafe_string(pointer(buf))
 end
 
 function crt_parse!(chain, buf::String)
     ret = ccall((:mbedtls_x509_crt_parse, MBED_X509), Cint,
-        (Ptr{Void}, Ptr{UInt8}, Csize_t),
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
         chain.data, buf, sizeof(buf)+1)
     ret == 0 || mbed_err(ret)
     chain

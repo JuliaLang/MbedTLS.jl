@@ -22,11 +22,11 @@ mutable struct RSA
     function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MD_MD5)
         ctx = new()
         ctx.data = Libc.malloc(1000)
-        ccall((:mbedtls_rsa_init, MBED_CRYPTO), Void,
-            (Ptr{Void}, Cint, Cint),
+        ccall((:mbedtls_rsa_init, MBED_CRYPTO), Cvoid,
+            (Ptr{Cvoid}, Cint, Cint),
             ctx.data, padding, hash_id)
-        finalizer(ctx->begin
-            ccall((:mbedtls_rsa_free, MBED_CRYPTO), Void, (Ptr{Void},), ctx.data)
+        @compat finalizer(ctx->begin
+            ccall((:mbedtls_rsa_free, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
         ctx
@@ -37,11 +37,11 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
     # Export from GMP
     size = ndigits(b, 2)
     nbytes = div(size+8-1,8)
-    data = @uninit Vector{UInt8}(uninitialized, nbytes)
+    data = Vector{UInt8}(uninitialized, nbytes)
     count = Ref{Csize_t}(0)
     # TODO Replace `Any` with `Ref{BigInt}` when 0.6 support is dropped.
-    ccall((:__gmpz_export,:libgmp), Ptr{Void},
-            (Ptr{Void}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Any),
+    ccall((:__gmpz_export,:libgmp), Ptr{Cvoid},
+            (Ptr{Cvoid}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Any),
             data, count, 1, 1, 1, 0, b)
     @assert count[] == nbytes
     # Import into mbedtls
@@ -67,7 +67,7 @@ function pubkey_from_vals!(ctx::RSA, e::BigInt, n::BigInt)
     unsafe_store!(Ptr{Csize_t}(ctx.data+fieldoffset(mbedtls_rsa_context,2 #=:len =#)),
         nptr_size)
     @err_check ccall((:mbedtls_rsa_check_pubkey, MBED_CRYPTO), Cint,
-        (Ptr{Void},), ctx.data)
+        (Ptr{Cvoid},), ctx.data)
     ctx
 end
 
@@ -76,7 +76,7 @@ function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; usin
         error("Private key verification requires the rng")
     # All errors, including validation errors throw
     @err_check ccall((:mbedtls_rsa_pkcs1_verify, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Ptr{Void}, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
         ctx.data,
         rng == nothing ? C_NULL : c_rng[],
         rng == nothing ? C_NULL : pointer_from_objref(rng),
@@ -87,7 +87,7 @@ end
 
 function gen_key!(ctx::RSA, f_rng, p_rng, nbits, exponent)
     @err_check ccall((:mbedtls_rsa_gen_key, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Ptr{Void}, Cint, Cint),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint),
         ctx.data, f_rng, p_rng, nbits, exponent)
     ctx
 end
@@ -101,13 +101,13 @@ end
 
 function public(ctx::RSA, input, output)
     @err_check ccall((:mbedtls_rsa_public, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Ptr{Void}), ctx.data, input, output)
+        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}), ctx.data, input, output)
     output
 end
 
 function private(ctx::RSA, f_rng, p_rng, input, output)
     @err_check ccall((:mbedtls_rsa_private, MBED_CRYPTO), Cint,
-        (Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Void}),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         ctx.data, f_rng, p_rng, input, output)
     output
 end
