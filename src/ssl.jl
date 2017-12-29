@@ -23,6 +23,7 @@ Base.show(io::IO, c::SSLConfig) = print(io, "MbedTLS.SSLConfig()")
 
 mutable struct SSLContext <: IO
     data::Ptr{Cvoid}
+    datalock::ReentrantLock
     config::SSLConfig
     isopen::Bool
     bio
@@ -30,6 +31,7 @@ mutable struct SSLContext <: IO
     function SSLContext()
         ctx = new()
         ctx.data = Libc.malloc(1000)  # 488
+        ctx.datalock = ReentrantLock()
         ccall((:mbedtls_ssl_init, MBED_TLS), Cvoid, (Ptr{Cvoid},), ctx.data)
         @compat finalizer(ctx->begin
             ccall((:mbedtls_ssl_free, MBED_TLS), Cvoid, (Ptr{Cvoid},), ctx.data)
@@ -37,6 +39,18 @@ mutable struct SSLContext <: IO
         end, ctx)
         ctx
     end
+end
+
+macro lockdata(ctx, expr)
+    esc(quote
+        lock($ctx.datalock)
+        @assert $ctx.datalock.reentrancy_cnt == 1
+        try
+            $expr
+        finally
+            unlock($ctx.datalock)
+        end
+    end)
 end
 
 function config_defaults!(config::SSLConfig; endpoint=MBEDTLS_SSL_IS_CLIENT,
@@ -79,16 +93,20 @@ function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
 end
 
 function setup!(ctx::SSLContext, conf::SSLConfig)
-    ctx.config = conf
-    @err_check ccall((:mbedtls_ssl_setup, MBED_TLS), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}),
-        ctx.data, conf.data)
+    @lockdata ctx begin
+        ctx.config = conf
+        @err_check ccall((:mbedtls_ssl_setup, MBED_TLS), Cint,
+            (Ptr{Cvoid}, Ptr{Cvoid}),
+            ctx.data, conf.data)
+    end
 end
 
 function set_bio!(ssl_ctx::SSLContext, ctx, f_send::Ptr{Cvoid}, f_recv::Ptr{Cvoid})
-    ccall((:mbedtls_ssl_set_bio, MBED_TLS), Cvoid,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
-        ssl_ctx.data, ctx, f_send, f_recv, C_NULL)
+    @lockdata ssl_ctx begin
+        ccall((:mbedtls_ssl_set_bio, MBED_TLS), Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+            ssl_ctx.data, ctx, f_send, f_recv, C_NULL)
+    end
 end
 
 function f_send(c_ctx, c_msg, sz)
@@ -142,9 +160,11 @@ function set_dbg_level(level)
 end
 
 function handshake(ctx::SSLContext)
-    @err_check ccall((:mbedtls_ssl_handshake, MBED_TLS), Cint,
-        (Ptr{Cvoid},), ctx.data)
-    ctx.isopen = true
+    @lockdata ctx begin
+        @err_check ccall((:mbedtls_ssl_handshake, MBED_TLS), Cint,
+            (Ptr{Cvoid},), ctx.data)
+        ctx.isopen = true
+    end
     nothing
 end
 
@@ -164,33 +184,37 @@ end
 import Base: unsafe_read, unsafe_write
 
 function Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
-    nw = 0
-    while nw < N
-        ret = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
-                    (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                    ctx.data, msg, N - nw)
-        ret < 0 && mbed_err(ret)
-        nw += ret
-        msg += ret
+    @lockdata ctx begin
+        nw = 0
+        while nw < N
+            ret = ccall((:mbedtls_ssl_write, MBED_TLS), Cint,
+                        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+                        ctx.data, msg, N - nw)
+            ret < 0 && mbed_err(ret)
+            nw += ret
+            msg += ret
+        end
+        return Int(nw)
     end
-    return Int(nw)
 end
 
 Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 
 function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
-    nread::UInt = 0
-    while nread < nbytes
-        n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
-                  (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                  ctx.data, buf + nread, nbytes - nread)
-        if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || n == 0
-            ctx.isopen = false
-            err ? throw(EOFError()) : return nread
-        end
-        if n != MBEDTLS_ERR_SSL_WANT_READ
-            n < 0 && mbed_err(n)
-            nread += n
+    @lockdata ctx begin
+        nread::UInt = 0
+        while nread < nbytes
+            n = ccall((:mbedtls_ssl_read, MBED_TLS), Cint,
+                      (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+                      ctx.data, buf + nread, nbytes - nread)
+            if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || n == 0
+                ctx.isopen = false
+                err ? throw(EOFError()) : return nread
+            end
+            if n != MBEDTLS_ERR_SSL_WANT_READ
+                n < 0 && mbed_err(n)
+                nread += n
+            end
         end
     end
 end
@@ -214,14 +238,19 @@ function Base.eof(ctx::SSLContext)
 end
 
 function Base.close(ctx::SSLContext)
-    if isopen(ctx.bio)
-        try  # This is ugly, but a harmless broken pipe exception will be thrown if the peer closes the connection without responding
-            ccall((:mbedtls_ssl_close_notify, MBED_TLS), Cint, (Ptr{Cvoid},), ctx.data)
-        catch
+    @lockdata ctx begin
+        if isopen(ctx.bio)
+            try
+                # This is ugly, but a harmless broken pipe exception will be
+                # thrown if the peer closes the connection without responding
+                ccall((:mbedtls_ssl_close_notify, MBED_TLS),
+                       Cint, (Ptr{Cvoid},), ctx.data)
+            catch
+            end
+            close(ctx.bio)
         end
-        close(ctx.bio)
+        ctx.isopen = false
     end
-    ctx.isopen = false
     nothing
 end
 
@@ -247,12 +276,15 @@ function get_ciphersuite(ctx::SSLContext)
 end
 
 function Base.nb_available(ctx::SSLContext)
-    # First try to read from the socket and decrypt incoming data if possible.
-    # https://esp32.com/viewtopic.php?t=1101#p4884
-    ccall((:mbedtls_ssl_read, MBED_TLS), Cint, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                                                ctx.data,  C_NULL,    0)
-    n = ccall((:mbedtls_ssl_get_bytes_avail, MBED_TLS), Csize_t, (Ptr{Cvoid},), ctx.data)
-    return Int(n)
+    @lockdata ctx begin
+        # First try to read from the socket and decrypt incoming data if
+        # possible. https://esp32.com/viewtopic.php?t=1101#p4884
+        ccall((:mbedtls_ssl_read, MBED_TLS),
+              Cint, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ctx.data, C_NULL, 0)
+        n = ccall((:mbedtls_ssl_get_bytes_avail, MBED_TLS),
+                  Csize_t, (Ptr{Cvoid},), ctx.data)
+        return Int(n)
+    end
 end
 
 function hostname!(ctx::SSLContext, hostname)
