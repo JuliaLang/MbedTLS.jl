@@ -192,11 +192,14 @@ function get_key_bitlen(cipher::Cipher)
 end
 
 tobytes(x::Vector{UInt8}) = x
-tobytes(x) = Vector{UInt8}(x)
+@static if isdefined(Base, :CodeUnits)
+tobytes(x::Base.CodeUnits) = x
+end
+tobytes(x) = codeunits(x)
 
 function set_key!(cipher::Cipher, key, op::Operation)
     key_b = tobytes(key)
-    keysize = 8sizeof(key_b)  # Convert key size from bytes to bits
+    keysize = 8 * sizeof(key_b)  # Convert key size from bytes to bits
     @err_check ccall((:mbedtls_cipher_setkey, MBED_CRYPTO), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint),
         cipher.data, pointer(key_b), keysize, Int(op))
