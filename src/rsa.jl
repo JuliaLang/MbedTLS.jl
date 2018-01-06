@@ -76,26 +76,26 @@ function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; usin
         error("Private key verification requires the rng")
     # All errors, including validation errors throw
     @err_check ccall((:mbedtls_rsa_pkcs1_verify, MBED_CRYPTO), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
         ctx.data,
         rng == nothing ? C_NULL : c_rng[],
-        rng == nothing ? C_NULL : pointer_from_objref(rng),
+        rng == nothing ? Ref{Any}() : rng,
         using_public ? 0 : 1,
         hash_alg, sizeof(hash), hash, signature)
 end
 
 
-function gen_key!(ctx::RSA, f_rng, p_rng, nbits, exponent)
+function gen_key!(ctx::RSA, f_rng, rng, nbits, exponent)
     @err_check ccall((:mbedtls_rsa_gen_key, MBED_CRYPTO), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint),
-        ctx.data, f_rng, p_rng, nbits, exponent)
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Cint, Cint),
+        ctx.data, f_rng, rng, nbits, exponent)
     ctx
 end
 
 
 function gen_key(rng::AbstractRNG, nbits=2048, exponent=65537)
     ctx = RSA()
-    gen_key!(ctx, c_rng[], pointer_from_objref(rng), nbits, exponent)
+    gen_key!(ctx, c_rng[], rng, nbits, exponent)
     ctx
 end
 
@@ -105,13 +105,13 @@ function public(ctx::RSA, input, output)
     output
 end
 
-function private(ctx::RSA, f_rng, p_rng, input, output)
+function private(ctx::RSA, f_rng, rng, input, output)
     @err_check ccall((:mbedtls_rsa_private, MBED_CRYPTO), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
-        ctx.data, f_rng, p_rng, input, output)
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Ptr{Cvoid}),
+        ctx.data, f_rng, rng, input, output)
     output
 end
 
 function private(ctx::RSA, rng::AbstractRNG, input, output)
-    private(ctx, c_rng[], pointer_from_objref(rng), input, output)
+    private(ctx, c_rng[], rng, input, output)
 end

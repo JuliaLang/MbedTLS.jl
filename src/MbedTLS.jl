@@ -3,6 +3,14 @@ module MbedTLS
 
 using Compat
 
+if !isdefined(Base, :codeunits)
+    const codeunits = Vector{UInt8}
+end
+
+if !applicable(contains, "", r"")
+    Base.contains(s::String, r::Regex) = ismatch(r, s)
+end
+
 export
 # Message digests
     MD_NONE,
@@ -59,7 +67,7 @@ function __init__()
 end
 __init__()
 
-# using TransportLayerSecurity
+tls_dbg(level, filename, number, msg) = warn("MbedTLS emitted debug info: $msg in $filename:$number")
 
 # already defined SSLConfig and SSLContext types in ssl.jl
 function SSLConfig(cert_file, key_file)
@@ -72,14 +80,8 @@ function SSLConfig(cert_file, key_file)
     MbedTLS.seed!(rng, entropy)
     MbedTLS.rng!(conf, rng)
     MbedTLS.own_cert!(conf, ssl_cert, key)
-    MbedTLS.dbg!(conf, (level, filename, number, msg)->begin
-        warn("MbedTLS emitted debug info: $msg in $filename:$number")
-    end)
+    MbedTLS.dbg!(conf, tls_dbg)
     return conf
-end
-
-function tls_dbg(level, filename, number, msg)
-    warn("MbedTLS emitted debug info: $msg in $filename:$number")
 end
 
 function SSLConfig(verify::Bool)

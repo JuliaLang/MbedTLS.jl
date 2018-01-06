@@ -17,10 +17,9 @@ mutable struct CtrDrbg  <: AbstractRNG
     CrtDrbg(data) = new(data)
 end
 
-function f_rng(c_ctx, c_buf, sz)
-    jl_ctx = unsafe_pointer_to_objref(c_ctx)
+function f_rng(rng, c_buf, sz)
     jl_buf = unsafe_wrap(Array, c_buf, sz, false)
-    rand!(jl_ctx, jl_buf)
+    rand!(rng, jl_buf)
     MBED_SUCCESS
 end
 
@@ -49,5 +48,5 @@ end
 
 const c_rng = Ref{Ptr{Cvoid}}(C_NULL)
 function __ctr_drbg__init__()
-    c_rng[] = cfunction(f_rng, Cint, Tuple{Ptr{Cvoid}, Ptr{UInt8}, Csize_t})
+    c_rng[] = cfunction(f_rng, Cint, Tuple{Any, Ptr{UInt8}, Csize_t})
 end

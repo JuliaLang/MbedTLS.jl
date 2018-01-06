@@ -23,28 +23,28 @@ let
 end
 
 # openssl rsa -inform PEM -text -noout < key.pem
-keyPEMN =
-"""
-    00:bc:42:e0:e8:31:52:fd:af:e3:32:42:c4:28:5b:
-    e9:cf:50:af:e9:20:c7:96:37:5c:cb:09:e6:90:5c:
-    ac:fc:8c:03:22:7c:68:70:32:f0:7b:e4:52:85:a2:
-    12:61:ac:82:16:a6:66:e8:e9:a2:f4:dc:b7:05:0f:
-    e0:21:ea:0d:6d:0d:3e:fe:5e:c2:6a:59:36:52:c9:
-    66:5a:54:b9:f7:80:43:41:48:56:b5:b3:50:bd:2a:
-    29:8c:81:96:29:64:0a:80:82:a4:dc:93:28:8f:43:
-    d5:0b:4b:3a:4f:c4:be:a0:ff:3f:c6:68:16:f0:c5:
-    be:04:16:fc:b6:52:c4:d8:f9:4d:66:bc:d6:b8:ce:
-    4f:a4:5a:97:66:fb:5d:db:1c:e9:e6:89:ab:f6:82:
-    9e:de:93:f7:3d:b4:35:77:5e:ae:1f:67:14:29:a4:
-    00:df:7c:2c:3d:76:42:d5:76:08:ff:11:09:20:fc:
-    bd:8a:8d:d4:a9:ce:2e:35:2b:c6:d2:de:dc:ad:1b:
-    8d:01:7c:c5:32:9a:8e:c4:f7:a6:94:55:d3:4b:96:
-    1b:ee:a0:94:95:5f:b2:a0:b0:f8:bb:02:b0:a5:a9:
-    0e:62:f1:a2:8a:3a:6f:ec:c2:e9:5e:b5:73:45:cb:
-    35:86:24:07:e8:11:28:25:7d:ce:35:c0:48:ff:a0:
-    f6:13
-"""
-keyPEMN = parse(BigInt, replace(keyPEMN, Set([' ',':','\n']), ""), 16)
+# keyPEMN =
+# """
+#     00:bc:42:e0:e8:31:52:fd:af:e3:32:42:c4:28:5b:
+#     e9:cf:50:af:e9:20:c7:96:37:5c:cb:09:e6:90:5c:
+#     ac:fc:8c:03:22:7c:68:70:32:f0:7b:e4:52:85:a2:
+#     12:61:ac:82:16:a6:66:e8:e9:a2:f4:dc:b7:05:0f:
+#     e0:21:ea:0d:6d:0d:3e:fe:5e:c2:6a:59:36:52:c9:
+#     66:5a:54:b9:f7:80:43:41:48:56:b5:b3:50:bd:2a:
+#     29:8c:81:96:29:64:0a:80:82:a4:dc:93:28:8f:43:
+#     d5:0b:4b:3a:4f:c4:be:a0:ff:3f:c6:68:16:f0:c5:
+#     be:04:16:fc:b6:52:c4:d8:f9:4d:66:bc:d6:b8:ce:
+#     4f:a4:5a:97:66:fb:5d:db:1c:e9:e6:89:ab:f6:82:
+#     9e:de:93:f7:3d:b4:35:77:5e:ae:1f:67:14:29:a4:
+#     00:df:7c:2c:3d:76:42:d5:76:08:ff:11:09:20:fc:
+#     bd:8a:8d:d4:a9:ce:2e:35:2b:c6:d2:de:dc:ad:1b:
+#     8d:01:7c:c5:32:9a:8e:c4:f7:a6:94:55:d3:4b:96:
+#     1b:ee:a0:94:95:5f:b2:a0:b0:f8:bb:02:b0:a5:a9:
+#     0e:62:f1:a2:8a:3a:6f:ec:c2:e9:5e:b5:73:45:cb:
+#     35:86:24:07:e8:11:28:25:7d:ce:35:c0:48:ff:a0:
+#     f6:13
+# """
+keyPEMN = parse(BigInt, "00bc42e0e83152fdafe33242c4285be9cf50afe920c796375ccb09e6905cacfc8c03227c687032f07be45285a21261ac8216a666e8e9a2f4dcb7050fe021ea0d6d0d3efe5ec26a593652c9665a54b9f78043414856b5b350bd2a298c819629640a8082a4dc93288f43d50b4b3a4fc4bea0ff3fc66816f0c5be0416fcb652c4d8f94d66bcd6b8ce4fa45a9766fb5ddb1ce9e689abf6829ede93f73db435775eae1f671429a400df7c2c3d7642d57608ff110920fcbd8a8dd4a9ce2e352bc6d2dedcad1b8d017cc5329a8ec4f7a69455d34b961beea094955fb2a0b0f8bb02b0a5a90e62f1a28a3a6fecc2e95eb57345cb35862407e81128257dce35c048ffa0f613", 16)
 keyPEMe = BigInt(65537)
 
 function verify_key_pem(data, signature)
@@ -93,7 +93,7 @@ let
     function entropy_func(buf)
         rng = RandomDevice()
         buf[:] = rand(rng, UInt8, length(buf))
-        return length(buf)
+        return Cint(length(buf))
     end
 
     MbedTLS.add_source!(entropy, entropy_func, 0, true)
@@ -123,7 +123,7 @@ let
 
     write(ctx, "GET / HTTP/1.1\r\nHost: $testhost\r\n\r\n")
     buf = String(read(ctx, 100))
-    @test ismatch(r"^HTTP/1.1 200 OK", buf)
+    @test contains(buf, r"^HTTP/1.1 200 OK")
 end
 
 # Test ALPN
@@ -135,7 +135,7 @@ let
     function entropy_func(buf)
         rng = RandomDevice()
         buf[:] = rand(rng, UInt8, length(buf))
-        return length(buf)
+        return Cint(length(buf))
     end
 
     MbedTLS.add_source!(entropy, entropy_func, 0, true)
@@ -222,7 +222,7 @@ let
     a16 = fill(UInt16(0), 1)
     reinterpret(UInt8, a16) .= UInt8['j', 'l']
     write(md, a16)
-    @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,Vector{UInt8}("MbedTLS.jl"))
+    @test MbedTLS.finish!(md) == MbedTLS.digest(MD_SHA1,b"MbedTLS.jl")
 
     # Test reset functionality
     md = MbedTLS.MD(MbedTLS.MD_SHA256, "passcode")

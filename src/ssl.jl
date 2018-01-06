@@ -66,15 +66,15 @@ function authmode!(config::SSLConfig, auth)
         config.data, auth)
 end
 
-function rng!(config::SSLConfig, f_rng::Ptr{Cvoid}, ctx)
+function rng!(config::SSLConfig, f_rng::Ptr{Cvoid}, rng)
     ccall((:mbedtls_ssl_conf_rng, MBED_TLS), Cvoid,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
-        config.data, f_rng, ctx)
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any),
+        config.data, f_rng, rng)
 end
 
 function rng!(config::SSLConfig, rng::AbstractRNG)
     config.rng = rng
-    rng!(config, c_rng[], pointer_from_objref(rng))
+    rng!(config, c_rng[], rng)
 end
 
 function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem")))
@@ -130,19 +130,18 @@ end
 
 function dbg!(conf::SSLConfig, f::Ptr{Cvoid}, p)
     ccall((:mbedtls_ssl_conf_dbg, MBED_TLS), Cvoid,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any),
         conf.data, f, p)
 end
 
-function f_dbg(c_ctx, level, filename, number, msg)
-    jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    jl_ctx(level, unsafe_string(filename), number, unsafe_string(msg))
+function f_dbg(f, level, filename, number, msg)
+    f(level, unsafe_string(filename), number, unsafe_string(msg))
     nothing
 end
 
 function dbg!(conf::SSLConfig, f)
     conf.dbg = f
-    dbg!(conf, c_dbg[], pointer_from_objref(f))
+    dbg!(conf, c_dbg[], f)
     nothing
 end
 
@@ -298,5 +297,5 @@ const c_dbg = Ref{Ptr{Cvoid}}(C_NULL)
 function __sslinit__()
     c_send[] = cfunction(f_send, Cint, Tuple{Ptr{Cvoid}, Ptr{UInt8}, Csize_t})
     c_recv[] = cfunction(f_recv, Cint, Tuple{Ptr{Cvoid}, Ptr{UInt8}, Csize_t})
-    c_dbg[] = cfunction(f_dbg, Cvoid, Tuple{Ptr{Cvoid}, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}})
+    c_dbg[] = cfunction(f_dbg, Cvoid, Tuple{Any, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}})
 end
