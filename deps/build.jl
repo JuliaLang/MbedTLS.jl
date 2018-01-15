@@ -1,4 +1,7 @@
 using Compat
+if VERSION >= v"0.7.0-DEV.3382"
+    import Libdl
+end
 
 need_to_build_manually = true
 
