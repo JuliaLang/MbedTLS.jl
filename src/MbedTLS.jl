@@ -7,6 +7,10 @@ if !isdefined(Base, :codeunits)
     const codeunits = Vector{UInt8}
 end
 
+@static if VERSION >= v"0.7.0-DEV.3406"
+    using Random
+end
+
 if !applicable(contains, "", r"")
     Base.contains(s::String, r::Regex) = ismatch(r, s)
 end
