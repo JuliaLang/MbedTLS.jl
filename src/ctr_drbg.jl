@@ -34,14 +34,14 @@ end
 
 seed!(rng::CtrDrbg, entropy) = seed!(rng, entropy, UInt8[])
 
-function Base.rand!(rng::CtrDrbg, buf::Array)
+function Random.rand!(rng::CtrDrbg, buf::Array)
     @err_check ccall((:mbedtls_ctr_drbg_random, MBED_CRYPTO), Cint,
             (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         rng.data, buf, sizeof(buf))
     buf
 end
 
-function Base.rand(rng::CtrDrbg, size::Integer)
+function Random.rand(rng::CtrDrbg, size::Integer)
     buf = Vector{UInt8}(uninitialized, size)
     rand!(rng, buf)
 end
