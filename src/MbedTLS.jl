@@ -9,6 +9,8 @@ end
 
 @static if VERSION >= v"0.7.0-DEV.3406"
     using Random
+else
+    const Random = Base.Random
 end
 
 if !applicable(contains, "", r"")
