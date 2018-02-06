@@ -18,7 +18,7 @@ mutable struct CtrDrbg  <: AbstractRNG
 end
 
 function f_rng(rng, c_buf, sz)
-    jl_buf = unsafe_wrap(Array, c_buf, sz, false)
+    jl_buf = unsafe_wrap(Array, c_buf, sz)
     rand!(rng, jl_buf)
     MBED_SUCCESS
 end

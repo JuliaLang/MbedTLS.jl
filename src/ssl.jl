@@ -111,13 +111,13 @@ end
 
 function f_send(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    jl_msg = unsafe_wrap(Array, c_msg, sz, false)
+    jl_msg = unsafe_wrap(Array, c_msg, sz)
     return Cint(write(jl_ctx, jl_msg))
 end
 
 function f_recv(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    jl_msg = unsafe_wrap(Array, c_msg, sz, false)
+    jl_msg = unsafe_wrap(Array, c_msg, sz)
     n = readbytes!(jl_ctx, jl_msg, sz)
     return Cint(n)
 end
