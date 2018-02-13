@@ -23,7 +23,7 @@ function add_source!(ctx::Entropy, f_source::Ptr, f, threshold, strong)
 end
 
 function jl_entropy(f, output, len, olen)
-    output_jl = unsafe_wrap(Array, convert(Ptr{UInt8}, output), len, false)
+    output_jl = unsafe_wrap(Array, convert(Ptr{UInt8}, output), len)
     sz = f(output_jl)
     unsafe_store!(convert(Ptr{Csize_t}, olen), Csize_t(sz))
     return Cint(0)
