@@ -1,6 +1,10 @@
-using BinaryProvider, Compat
-# Parse some basic command-line arguments
-const prefix = Prefix(joinpath(Base.LIBDIR, "../"))
+using BinaryProvider, Compat, Compat.Libdl
+
+const prefix = try
+    dirname(Libdl.dlpath("libmbedtls"))
+catch
+    joinpath(Compat.Sys.BINDIR, "..")
+end
 
 const mbedtls = LibraryProduct(prefix, "libmbedtls", :MBED_TLS)
 const crypto = LibraryProduct(prefix, "libmbedcrypto", :MBED_CRYPTO)
