@@ -5,13 +5,11 @@ if ! cmake --version > /dev/null 2>&1; then
   exit 1
 fi
 
-pwd
-ls
 mkdir -p usr/lib
 cd mbedtls-$VERSION
 cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .
 make lib
-cd ../..
+cd ..
 cp mbedtls-$VERSION/library/libmbedtls.* usr/lib/
 cp mbedtls-$VERSION/library/libmbedcrypto.* usr/lib/
 cp mbedtls-$VERSION/library/libmbedx509.* usr/lib/
