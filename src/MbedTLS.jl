@@ -41,7 +41,7 @@ export
 
 import Base: show
 
-# Load libmariadb from our deps.jl
+# Load mbedtls libraries from our deps.jl
 const depsjl_path = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
 if !isfile(depsjl_path)
     error("MbedTLS not installed properly, run Pkg.build(\"MbedTLS\"), restart Julia and try again")

@@ -59,7 +59,7 @@ if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUIL
             run(Cmd(`./build.sh`, dir=@__DIR__))
         end
         if any(!satisfied(p; verbose=verbose) for p in products)
-            error("attmped to build mbedtls shared libraries, but they couldn't be located (deps/usr/lib)")
+            error("attempted to build mbedtls shared libraries, but they couldn't be located (deps/usr/lib)")
         else
             write_deps_file(joinpath(@__DIR__, "deps.jl"), products)
         end

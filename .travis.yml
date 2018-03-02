@@ -1,13 +1,5 @@
 # Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
-addons:
-  apt:
-    sources:
-      - ubuntu-toolchain-r-test
-    packages:
-      - gcc-6
-      - g++-6
-      - cmake
 env:
     - FORCE_BUILD=true
     - FORCE_BUILD=false
