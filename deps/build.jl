@@ -42,13 +42,13 @@ if any(!satisfied(p; verbose=verbose) for p in products)
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
         install(url, tarball_hash; prefix=prefix, force=true, verbose=verbose)
-        @info "using prebuilt binaries"
+        Compat.@info "using prebuilt binaries"
         write_deps_file(joinpath(@__DIR__, "deps.jl"), products)
     elseif all(satisfied(p; verbose=verbose) for p in juliaproducts)
-        @info "using julia-shippied binaries"
+        Compat.@info "using julia-shippied binaries"
         write_deps_file(joinpath(@__DIR__, "deps.jl"), juliaproducts)
     else
-        @info "attempting source build"
+        Compat.@info "attempting source build"
         run(Cmd(`./build.sh`, dir=@__DIR__))
         if any(!satisfied(p; verbose=verbose) for p in products)
             error("attmped to build mbedtls shared libraries, but they couldn't be located (deps/usr/lib)")
