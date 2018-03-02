@@ -12,4 +12,6 @@ cd mbedtls-$VERSION
 cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .
 make lib
 cd ../..
-cp mbedtls-$VERSION/library/libmbed* usr/lib/
+cp mbedtls-$VERSION/library/libmbedtls.* usr/lib/
+cp mbedtls-$VERSION/library/libmbedcrypto.* usr/lib/
+cp mbedtls-$VERSION/library/libmbedx509.* usr/lib/
