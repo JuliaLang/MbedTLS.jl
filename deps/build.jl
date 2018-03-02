@@ -53,7 +53,8 @@ if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUIL
         url, hash = haskey(ENV, "USE_GPL_MBEDTLS") ?
             ("https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz", "2c6fe289b4b50bf67b4839e81b07fcf52a19f5129d0241d2aa4d49cb1ef11e4f") :
             ("https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz", "aeb66d6cd43aa1c79c145d15845c655627a7fc30d624148aaafbb6c36d7f55ef")
-        download_verify_unpack(url, hash, @__DIR__, tarball_path=joinpath(@__DIR__, "mbedtls.tgz"), force=true, verbose=true)
+        download_verify(url, hash, joinpath(@__DIR__, "mbedtls.tgz"), force=true, verbose=true)
+        unpack(joinpath(@__DIR__, "mbedtls.tgz"), @__DIR__; verbose=true)
         withenv("VERSION"=>VERSION) do
             run(Cmd(`./build.sh`, dir=@__DIR__))
         end
