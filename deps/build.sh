@@ -5,16 +5,6 @@ if ! cmake --version > /dev/null 2>&1; then
   exit 1
 fi
 
-VERSION="2.7.0"
-
-if [ -z "$" ]; then
-    wget https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz
-    tar xfz mbedtls-$VERSION-apache.tgz
-else
-    wget https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz
-    tar xfz mbedtls-$VERSION-gpl.tgz
-fi
-
 cd mbedtls-$VERSION
 cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .
 make lib

@@ -16,9 +16,9 @@ catch
 end
 
 juliaproducts = Product[
-    LibraryProduct(juliaprefix, "libmbedtls", :MBED_TLS)
-    LibraryProduct(juliaprefix, "libmbedcrypto", :MBED_CRYPTO)
-    LibraryProduct(juliaprefix, "libmbedx509", :MBED_X509)
+    LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
+    LibraryProduct(juliaprefix, "libmbedcrypto", :libmbedcrypto)
+    LibraryProduct(juliaprefix, "libmbedx509", :libmbedx509)
 ]
 
 # Download binaries from hosted location
@@ -37,19 +37,24 @@ download_info = Dict(
 )
 
 # First, check to see if we're all satisfied
-if any(!satisfied(p; verbose=verbose) for p in products)
-    if haskey(download_info, platform_key())
+if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUILD", false)
+    if haskey(download_info, platform_key()) && !get(ENV, "FORCE_BUILD", false)
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
         install(url, tarball_hash; prefix=prefix, force=true, verbose=verbose)
         Compat.@info "using prebuilt binaries"
         write_deps_file(joinpath(@__DIR__, "deps.jl"), products)
-    elseif all(satisfied(p; verbose=verbose) for p in juliaproducts)
+    elseif all(satisfied(p; verbose=verbose) for p in juliaproducts) && !get(ENV, "FORCE_BUILD", false)
         Compat.@info "using julia-shippied binaries"
         write_deps_file(joinpath(@__DIR__, "deps.jl"), juliaproducts)
     else
         Compat.@info "attempting source build"
-        run(Cmd(`./build.sh`, dir=@__DIR__))
+        VERSION = "2.7.0"
+        url = haskey(ENV, "USE_GPL_MBEDTLS") ?
+            "https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz" :
+            "https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz"
+        download_verify_unpack(url, @__DIR__, force=true, verbose=true)
+        run(Cmd(`./build.sh`, dir=@__DIR__, env=("VERSION"=>VERSION,)))
         if any(!satisfied(p; verbose=verbose) for p in products)
             error("attmped to build mbedtls shared libraries, but they couldn't be located (deps/usr/lib)")
         else

@@ -1,20 +1,10 @@
 __precompile__(true)
 module MbedTLS
 
-using Compat
+using Compat, Compat.Random
 
 if !isdefined(Base, :codeunits)
     const codeunits = Vector{UInt8}
-end
-
-@static if VERSION >= v"0.7.0-DEV.3406"
-    using Random
-else
-    const Random = Base.Random
-end
-
-if !applicable(contains, "", r"")
-    Base.contains(s::String, r::Regex) = ismatch(r, s)
 end
 
 export
@@ -51,7 +41,12 @@ export
 
 import Base: show
 
-include(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
+# Load libmariadb from our deps.jl
+const depsjl_path = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
+if !isfile(depsjl_path)
+    error("MbedTLS not installed properly, run Pkg.build(\"MbedTLS\"), restart Julia and try again")
+end
+include(depsjl_path)
 
 const MBED_SUCCESS = Cint(0)
 

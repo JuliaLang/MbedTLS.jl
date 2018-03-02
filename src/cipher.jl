@@ -93,11 +93,11 @@ mutable struct Cipher
     function Cipher()
         ctx = new()
         ctx.data = Libc.malloc(200) # 88
-        ccall((:mbedtls_cipher_init, MBED_CRYPTO), Cvoid,
+        ccall((:mbedtls_cipher_init, libmbedcrypto), Cvoid,
             (Ptr{Cvoid},), ctx.data)
 
         @compat finalizer(ctx->begin
-            ccall((:mbedtls_cipher_free, MBED_CRYPTO), Cvoid,
+            ccall((:mbedtls_cipher_free, libmbedcrypto), Cvoid,
                 (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
@@ -107,14 +107,14 @@ mutable struct Cipher
 end
 
 function CipherInfo(name::AbstractString)
-    ptr = ccall((:mbedtls_cipher_info_from_string, MBED_CRYPTO), Ptr{Cvoid},
+    ptr = ccall((:mbedtls_cipher_info_from_string, libmbedcrypto), Ptr{Cvoid},
         (Cstring,), String(name))
     ptr == C_NULL && error("No cipher for $name found")
     CipherInfo(ptr)
 end
 
 function CipherInfo(kind::CipherKind)
-    ptr = ccall((:mbedtls_cipher_info_from_type, MBED_CRYPTO), Ptr{Cvoid},
+    ptr = ccall((:mbedtls_cipher_info_from_type, libmbedcrypto), Ptr{Cvoid},
         (Cint,), Int(kind))
     ptr == C_NULL && error("No cipher for $kind found")
     CipherInfo(ptr)
@@ -132,7 +132,7 @@ on the specific cipher id.
 be performed with this cipher info.
 """
 function CipherInfo(id::CipherID, key_bitlen, mode::CipherMode)
-    ptr = ccall((:mbedtls_cipher_info_from_values, MBED_CRYPTO), Ptr{Cvoid},
+    ptr = ccall((:mbedtls_cipher_info_from_values, libmbedcrypto), Ptr{Cvoid},
         (Cint, Cint, Cint), Int(id), key_bitlen, Int(mode))
     ptr == C_NULL && error("No cipher for ($id, $(key_bitlen), $mode) found")
     CipherInfo(ptr)
@@ -165,7 +165,7 @@ end
 
 function Cipher(info::CipherInfo)
     cipher = Cipher()
-    @err_check ccall((:mbedtls_cipher_setup, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_setup, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}), cipher.data, info.data)
     cipher
 end
@@ -186,7 +186,7 @@ function Base.show(io::IO, cipher::Cipher)
 end
 
 function get_key_bitlen(cipher::Cipher)
-    ret = ccall((:mbedtls_cipher_get_key_bitlen, MBED_CRYPTO), Cint,
+    ret = ccall((:mbedtls_cipher_get_key_bitlen, libmbedcrypto), Cint,
         (Ptr{Cvoid},), cipher.data)
     Int(ret)
 end
@@ -200,20 +200,20 @@ tobytes(x) = codeunits(x)
 function set_key!(cipher::Cipher, key, op::Operation)
     key_b = tobytes(key)
     keysize = 8 * sizeof(key_b)  # Convert key size from bytes to bits
-    @err_check ccall((:mbedtls_cipher_setkey, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_setkey, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint),
         cipher.data, pointer(key_b), keysize, Int(op))
     key
 end
 
 function set_padding_mode!(cipher::Cipher, padding::Padding)
-    @err_check ccall((:mbedtls_cipher_set_padding_mode, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_set_padding_mode, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cint), cipher.data, Int(padding))
 end
 
 function set_iv!(cipher::Cipher, iv)
     iv_b = tobytes(iv)
-    @err_check ccall((:mbedtls_cipher_set_iv, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_set_iv, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         cipher.data, pointer(iv_b), sizeof(iv_b))
 end
@@ -231,7 +231,7 @@ block size associated with `cipher`.
 function update!(cipher::Cipher, buf_in, buf_out)
     buf_in_b = tobytes(buf_in)
     out_ref = Ref{Csize_t}(sizeof(buf_out))
-    @err_check ccall((:mbedtls_cipher_update, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_update, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Ptr{Csize_t}),
         cipher.data, buf_in, sizeof(buf_in), buf_out, out_ref)
     Int(out_ref[])
@@ -239,7 +239,7 @@ end
 
 function finish!(cipher::Cipher, buf_out)
     out_ref = Ref{Csize_t}(sizeof(buf_out))
-    @err_check ccall((:mbedtls_cipher_finish, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_finish, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Csize_t}),
         cipher.data, buf_out, out_ref)
     Int(out_ref[])
@@ -276,7 +276,7 @@ function crypt!(cipher::Cipher, iv, buf_in, buf_out)
     olen_ref = Ref{Csize_t}(sizeof(buf_out))
     iv_b, iv_size = process_iv(iv, cipher)
     buf_in_b = tobytes(buf_in)
-    @err_check ccall((:mbedtls_cipher_crypt, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_cipher_crypt, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Ptr{Csize_t}),
         cipher.data, iv_b, iv_size, buf_in_b, sizeof(buf_in_b),
         buf_out, olen_ref)
