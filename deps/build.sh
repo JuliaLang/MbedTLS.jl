@@ -5,6 +5,8 @@ if ! cmake --version > /dev/null 2>&1; then
   exit 1
 fi
 
+pwd
+ls
 cd mbedtls-$VERSION
 cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .
 make lib
