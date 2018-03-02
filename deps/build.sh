@@ -7,9 +7,9 @@ fi
 
 pwd
 ls
-cd mbedtls-$VERSION
+mkdir -p usr/lib
+cd usr/mbedtls-$VERSION
 cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On .
 make lib
-cd ..
-mkdir -p usr/lib
-cp mbedtls-$VERSION/library/libmbed*.* usr/lib/
+cd ../..
+cp usr/mbedtls-$VERSION/library/libmbed*.* usr/lib/
