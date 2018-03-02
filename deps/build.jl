@@ -50,10 +50,10 @@ if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUIL
     else
         Compat.@info "attempting source build"
         VERSION = "2.7.0"
-        url = haskey(ENV, "USE_GPL_MBEDTLS") ?
-            "https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz" :
-            "https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz"
-        download_verify_unpack(url, @__DIR__, force=true, verbose=true)
+        url, hash = haskey(ENV, "USE_GPL_MBEDTLS") ?
+            ("https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz", "2c6fe289b4b50bf67b4839e81b07fcf52a19f5129d0241d2aa4d49cb1ef11e4f") :
+            ("https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz", "aeb66d6cd43aa1c79c145d15845c655627a7fc30d624148aaafbb6c36d7f55ef")
+        download_verify_unpack(url, hash, @__DIR__, force=true, verbose=true)
         run(Cmd(`./build.sh`, dir=@__DIR__, env=("VERSION"=>VERSION,)))
         if any(!satisfied(p; verbose=verbose) for p in products)
             error("attmped to build mbedtls shared libraries, but they couldn't be located (deps/usr/lib)")
