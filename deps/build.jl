@@ -38,13 +38,13 @@ download_info = Dict(
 
 # First, check to see if we're all satisfied
 if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUILD", false)
-    if haskey(download_info, platform_key()) && !get(ENV, "FORCE_BUILD", false)
+    if haskey(download_info, platform_key()) && get(ENV, "FORCE_BUILD", "false") != "true"
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
         install(url, tarball_hash; prefix=prefix, force=true, verbose=verbose)
         Compat.@info "using prebuilt binaries"
         write_deps_file(joinpath(@__DIR__, "deps.jl"), products)
-    elseif all(satisfied(p; verbose=verbose) for p in juliaproducts) && !get(ENV, "FORCE_BUILD", false)
+    elseif all(satisfied(p; verbose=verbose) for p in juliaproducts) && get(ENV, "FORCE_BUILD", "false") != "true"
         Compat.@info "using julia-shippied binaries"
         write_deps_file(joinpath(@__DIR__, "deps.jl"), juliaproducts)
     else
