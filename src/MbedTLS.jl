@@ -7,6 +7,10 @@ if !isdefined(Base, :codeunits)
     const codeunits = Vector{UInt8}
 end
 
+if !isdefined(Base, :_sockname)
+    import Sockets: TCPSocket
+end
+
 export
 # Message digests
     MD_NONE,
