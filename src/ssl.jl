@@ -162,7 +162,7 @@ function set_dbg_level(level)
 end
 
 function handshake(ctx::SSLContext)
-    while !eof(ctx.bio)
+    while true
         n = @lockdata ctx begin
             ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
                   (Ptr{Cvoid},), ctx.data)
@@ -173,6 +173,7 @@ function handshake(ctx::SSLContext)
         if n != MBEDTLS_ERR_SSL_WANT_READ
             mbed_err(n)
         end
+        eof(ctx.bio) # Wait for more data to arrive
     end
     ctx.isopen = true
     return
@@ -212,7 +213,7 @@ Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 
 function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
     nread::UInt = 0
-    while !eof(ctx.bio) && nread < nbytes
+    while nread < nbytes
         n = @lockdata ctx begin
             ccall((:mbedtls_ssl_read, libmbedtls), Cint,
                    (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
@@ -222,7 +223,7 @@ function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=tr
             ctx.isopen = false
             err ? throw(EOFError()) : return nread
         elseif n == MBEDTLS_ERR_SSL_WANT_READ
-            continue
+            eof(ctx.bio) # Wait for more data to arrive
         elseif n < 0
             mbed_err(n)
         else
