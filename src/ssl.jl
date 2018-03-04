@@ -161,6 +161,9 @@ function set_dbg_level(level)
     nothing
 end
 
+Base.wait(ctx::SSLContext) = (eof(ctx.bio); nothing)
+                             # eof blocks if the receive buffer is empty
+
 function handshake(ctx::SSLContext)
     while true
         n = @lockdata ctx begin
@@ -173,7 +176,7 @@ function handshake(ctx::SSLContext)
         if n != MBEDTLS_ERR_SSL_WANT_READ
             mbed_err(n)
         end
-        eof(ctx.bio) # Wait for more data to arrive
+        wait(ctx)
     end
     ctx.isopen = true
     return
@@ -223,7 +226,7 @@ function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=tr
             ctx.isopen = false
             err ? throw(EOFError()) : return nread
         elseif n == MBEDTLS_ERR_SSL_WANT_READ
-            eof(ctx.bio) # Wait for more data to arrive
+            wait(ctx)
         elseif n < 0
             mbed_err(n)
         else
