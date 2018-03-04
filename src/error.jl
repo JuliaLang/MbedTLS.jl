@@ -18,7 +18,7 @@ mbed_err(ret) = throw(MbedException(ret))
 
 function strerror(ret, bufsize=1000)
     buf = Vector{UInt8}(uninitialized, bufsize)
-    ccall((:mbedtls_strerror, MBED_CRYPTO), Cint,
+    ccall((:mbedtls_strerror, libmbedcrypto), Cint,
         (Cint, Ptr{Cvoid}, Csize_t),
         ret, buf, bufsize)
     unsafe_string(pointer(buf))

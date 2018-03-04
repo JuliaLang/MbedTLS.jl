@@ -6,9 +6,9 @@ mutable struct Entropy
         ctx = new()
         ctx.data = Libc.malloc(100000)  # Exact byte count is 75088; playing it safe with some buffer
         ctx.sources = Any[]
-        ccall((:mbedtls_entropy_init, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
+        ccall((:mbedtls_entropy_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
         @compat finalizer(ctx->begin
-            ccall((:mbedtls_entropy_free, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
+            ccall((:mbedtls_entropy_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
         ctx
@@ -16,7 +16,7 @@ mutable struct Entropy
 end
 
 function add_source!(ctx::Entropy, f_source::Ptr, f, threshold, strong)
-    ret = ccall((:mbedtls_entropy_add_source, MBED_CRYPTO), Cint,
+    ret = ccall((:mbedtls_entropy_add_source, libmbedcrypto), Cint,
       (Ptr{Cvoid}, Ptr{Cvoid}, Any, Csize_t, Cint),
       ctx.data, f_source, f, threshold, strong)
     Int(ret)
@@ -40,11 +40,11 @@ function __entropyinit__()
 end
 
 function gather(ctx::Entropy)
-    @err_check ccall((:mbedtls_entropy_gather, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_entropy_gather, libmbedcrypto), Cint,
       (Ptr{Cvoid},), ctx.data)
 end
 
 function update_manual(ctx::Entropy, data::Vector{UInt8})
-    @err_check ccall((:mbedtls_entropy_update_manual, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_entropy_update_manual, libmbedcrypto), Cint,
       (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ctx.data, pointer(data), length(data))
 end

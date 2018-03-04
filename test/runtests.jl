@@ -1,13 +1,9 @@
-using MbedTLS
+using MbedTLS, Compat, Compat.Test, Compat.Random
 
-@static if VERSION < v"0.7.0-DEV.2005"
-    using Base.Test
+@static if isdefined(Base, :_sockname)
+    import Base: connect
 else
-    using Test
-end
-
-@static if VERSION >= v"0.7.0-DEV.3406"
-    using Random
+    import Sockets: connect
 end
 
 # Message digests

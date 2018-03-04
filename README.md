@@ -9,6 +9,7 @@ A wrapper around the [mbed](https://tls.mbed.org/) TLS and cryptography C libary
 Usage:
 
 ```julia
+using Sockets
 sock = connect("httpbin.org", 443)
 entropy = MbedTLS.Entropy()
 rng = MbedTLS.CtrDrbg()

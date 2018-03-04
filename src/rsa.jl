@@ -22,11 +22,11 @@ mutable struct RSA
     function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MD_MD5)
         ctx = new()
         ctx.data = Libc.malloc(1000)
-        ccall((:mbedtls_rsa_init, MBED_CRYPTO), Cvoid,
+        ccall((:mbedtls_rsa_init, libmbedcrypto), Cvoid,
             (Ptr{Cvoid}, Cint, Cint),
             ctx.data, padding, hash_id)
         @compat finalizer(ctx->begin
-            ccall((:mbedtls_rsa_free, MBED_CRYPTO), Cvoid, (Ptr{Cvoid},), ctx.data)
+            ccall((:mbedtls_rsa_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
         ctx
@@ -45,13 +45,13 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
             data, count, 1, 1, 1, 0, b)
     @assert count[] == nbytes
     # Import into mbedtls
-    @err_check ccall((:mbedtls_mpi_read_binary, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_mpi_read_binary, libmbedcrypto), Cint,
         (Ptr{mbedtls_mpi}, Ptr{UInt8}, Csize_t),
         mpi, data, nbytes)
 end
 
 function mpi_size(mpi::Ptr{mbedtls_mpi})
-    ccall((:mbedtls_mpi_size, MBED_CRYPTO), Csize_t, (Ptr{mbedtls_mpi},), mpi)
+    ccall((:mbedtls_mpi_size, libmbedcrypto), Csize_t, (Ptr{mbedtls_mpi},), mpi)
 end
 
 # 0.4 had a buggy implementation of fieldoffset (off by one)
@@ -66,7 +66,7 @@ function pubkey_from_vals!(ctx::RSA, e::BigInt, n::BigInt)
     nptr_size = mpi_size(Nptr)
     unsafe_store!(Ptr{Csize_t}(ctx.data+fieldoffset(mbedtls_rsa_context,2 #=:len =#)),
         nptr_size)
-    @err_check ccall((:mbedtls_rsa_check_pubkey, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_rsa_check_pubkey, libmbedcrypto), Cint,
         (Ptr{Cvoid},), ctx.data)
     ctx
 end
@@ -75,7 +75,7 @@ function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; usin
     (!using_public && rng == nothing) &&
         error("Private key verification requires the rng")
     # All errors, including validation errors throw
-    @err_check ccall((:mbedtls_rsa_pkcs1_verify, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_rsa_pkcs1_verify, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Any, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
         ctx.data,
         rng == nothing ? C_NULL : c_rng[],
@@ -86,7 +86,7 @@ end
 
 
 function gen_key!(ctx::RSA, f_rng, rng, nbits, exponent)
-    @err_check ccall((:mbedtls_rsa_gen_key, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_rsa_gen_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Any, Cint, Cint),
         ctx.data, f_rng, rng, nbits, exponent)
     ctx
@@ -100,13 +100,13 @@ function gen_key(rng::AbstractRNG, nbits=2048, exponent=65537)
 end
 
 function public(ctx::RSA, input, output)
-    @err_check ccall((:mbedtls_rsa_public, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_rsa_public, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}), ctx.data, input, output)
     output
 end
 
 function private(ctx::RSA, f_rng, rng, input, output)
-    @err_check ccall((:mbedtls_rsa_private, MBED_CRYPTO), Cint,
+    @err_check ccall((:mbedtls_rsa_private, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Ptr{Cvoid}),
         ctx.data, f_rng, rng, input, output)
     output
