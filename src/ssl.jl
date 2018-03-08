@@ -116,7 +116,7 @@ end
 
 function f_recv(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    n = nb_available(jl_ctx)
+    n = bytesavailable(jl_ctx)
     if n == 0
         return Cint(MBEDTLS_ERR_SSL_WANT_READ)
     end
@@ -246,11 +246,11 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt)
     return Int(nr::UInt)
 end
 
-Base.readavailable(ctx::SSLContext) = read(ctx, nb_available(ctx))
+Base.readavailable(ctx::SSLContext) = read(ctx, bytesavailable(ctx))
 
 function Base.eof(ctx::SSLContext)
-    nb_available(ctx)>0 && return false
-    return eof(ctx.bio) && nb_available(ctx) == 0
+    bytesavailable(ctx)>0 && return false
+    return eof(ctx.bio) && bytesavailable(ctx) == 0
 end
 
 function Base.close(ctx::SSLContext)
@@ -291,7 +291,13 @@ function get_ciphersuite(ctx::SSLContext)
     return unsafe_string(data)
 end
 
-function Base.nb_available(ctx::SSLContext)
+@static if isdefined(Base, :bytesavailable)
+    Base.bytesavailable(ctx::SSLContext) = _bytesavailable(ctx)
+else
+    Base.nb_available(ctx::SSLContext) = _bytesavailable(ctx)
+end
+
+function _bytesavailable(ctx::SSLContext)
 
     @lockdata ctx begin
 
