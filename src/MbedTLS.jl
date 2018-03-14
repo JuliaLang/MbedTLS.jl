@@ -3,11 +3,7 @@ module MbedTLS
 
 using Compat, Compat.Random
 
-if !isdefined(Base, :codeunits)
-    const codeunits = Vector{UInt8}
-end
-
-if !isdefined(Base, :_sockname)
+if VERSION >= v"0.7.0-DEV.4442"
     import Sockets: TCPSocket
 end
 
