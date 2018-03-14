@@ -9,11 +9,7 @@ products = Product[
     LibraryProduct(prefix, String["libmbedx509"], :libmbedx509),
 ]
 
-const juliaprefix = try
-    dirname(Libdl.dlpath("libmbedtls"))
-catch
-    joinpath(Compat.Sys.BINDIR, "..")
-end
+const juliaprefix = joinpath(Compat.Sys.BINDIR, "..")
 
 juliaproducts = Product[
     LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
