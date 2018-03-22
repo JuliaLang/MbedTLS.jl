@@ -156,7 +156,7 @@ function finish!(ctx::MD{true}, buf)
 end
 
 function finish!(ctx::MD)
-    buf = Vector{UInt8}(uninitialized, get_size(ctx))
+    buf = Vector{UInt8}(undef, get_size(ctx))
     finish!(ctx, buf)
     buf
 end
@@ -168,10 +168,9 @@ function reset!(ctx::MD{true})
 end
 
 function digest!(kind::MDKind, msg, buf)
-    msg_b = String(msg)
     @err_check ccall((:mbedtls_md, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}),
-        MDInfo(kind).data, pointer(msg_b), sizeof(msg_b), pointer(buf))
+        MDInfo(kind).data, pointer(msg), sizeof(msg), pointer(buf))
 end
 
 """
@@ -195,21 +194,20 @@ It is the user's responsibility to ensure that buffer is long enough to contain 
 function digest! end
 
 function digest(kind::MDKind, msg)
-    buf = Vector{UInt8}(uninitialized, get_size(kind))
+    buf = Vector{UInt8}(undef, get_size(kind))
     digest!(kind, msg, buf)
     buf
 end
 
 function digest!(kind::MDKind, msg, key, buf)
-    msg_b = String(msg)
     @err_check ccall((:mbedtls_md_hmac, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}),
         MDInfo(kind).data, pointer(key), sizeof(key),
-        pointer(msg_b), sizeof(msg_b), pointer(buf))
+        pointer(msg), sizeof(msg), pointer(buf))
 end
 
 function digest(kind::MDKind, msg, key)
-    buf = Vector{UInt8}(uninitialized, get_size(kind))
+    buf = Vector{UInt8}(undef, get_size(kind))
     digest!(kind, msg, key, buf)
     buf
 end

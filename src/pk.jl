@@ -100,7 +100,7 @@ end
 
 function sign(ctx::PKContext, hash_alg::MDKind, hash, rng)
     n = Int64(ceil(bitlength(ctx) / 8))
-    output = Vector{UInt8}(uninitialized, n)
+    output = Vector{UInt8}(undef, n)
     @assert sign!(ctx, hash_alg, hash, output, rng) == n
     output
 end
