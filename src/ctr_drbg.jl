@@ -42,7 +42,7 @@ function Random.rand!(rng::CtrDrbg, buf::Array)
 end
 
 function Random.rand(rng::CtrDrbg, size::Integer)
-    buf = Vector{UInt8}(uninitialized, size)
+    buf = Vector{UInt8}(undef, size)
     rand!(rng, buf)
 end
 

@@ -123,7 +123,7 @@ let
 
     write(ctx, "GET / HTTP/1.1\r\nHost: $testhost\r\n\r\n")
     buf = String(read(ctx, 100))
-    @test contains(buf, r"^HTTP/1.1 200 OK")
+    @test occursin(r"^HTTP/1.1 200 OK", buf)
 end
 
 # Test ALPN

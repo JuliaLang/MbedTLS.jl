@@ -3,7 +3,7 @@ module MbedTLS
 
 using Compat, Compat.Random
 
-if VERSION >= v"0.7.0-DEV.4442"
+@static if VERSION >= v"0.7.0-DEV.4442"
     import Sockets: TCPSocket
 end
 
