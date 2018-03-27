@@ -33,7 +33,7 @@ download_info = Dict(
 )
 
 # First, check to see if we're all satisfied
-if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUILD", false)
+if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUILD", "false")
     if haskey(download_info, platform_key()) && get(ENV, "FORCE_BUILD", "false") != "true" && !haskey(ENV, "USE_GPL_MBEDTLS")
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
