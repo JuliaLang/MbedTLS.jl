@@ -48,6 +48,13 @@ if !isfile(depsjl_path)
 end
 include(depsjl_path)
 
+const VERSION_BUFFER = zeros(UInt8, 9)
+function getversion()
+    ccall((:mbedtls_version_get_string, libmbedtls), Cvoid, (Ptr{UInt8},), VERSION_BUFFER)
+    return VersionNumber(unsafe_string(pointer(VERSION_BUFFER)))
+end
+const CURRENT_MBEDTLS_VERSION = v"2.7.0"
+
 const MBED_SUCCESS = Cint(0)
 
 include("constants.jl")
@@ -65,8 +72,11 @@ function __init__()
     __ctr_drbg__init__()
     __sslinit__()
     __entropyinit__()
+    v = getversion()
+    if v < CURRENT_MBEDTLS_VERSION
+        Compat.@warn "version of libmbedtls loaded is less than currently supported version: $v < $CURRENT_MBEDTLS_VERSION"
+    end
 end
-__init__()
 
 tls_dbg(level, filename, number, msg) = warn("MbedTLS emitted debug info: $msg in $filename:$number")
 
