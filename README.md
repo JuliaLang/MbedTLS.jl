@@ -6,6 +6,8 @@
 
 A wrapper around the [mbed](https://tls.mbed.org/) TLS and cryptography C libary.
 
+MbedTLS.jl currently supports versions 2.7.0/2.7.1 of [ARMmbed/mbedtls](https://github.com/ARMmbed/mbedtls).
+
 Usage:
 
 ```julia
