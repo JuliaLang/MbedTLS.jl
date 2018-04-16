@@ -7,6 +7,12 @@ using Compat, Compat.Random
     import Sockets: TCPSocket
 end
 
+@static if VERSION < v"0.7.0-DEV.4749"
+    macro cfunction(f, r, argtypes)
+        esc(:(cfunction($f, $r, Tuple{$(argtypes)...})))
+    end
+end
+
 export
 # Message digests
     MD_NONE,

@@ -36,7 +36,7 @@ end
 
 const c_entropy = Ref{Ptr{Cvoid}}(C_NULL)
 function __entropyinit__()
-    c_entropy[] = cfunction(jl_entropy, Cint, Tuple{Any, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}})
+    c_entropy[] = @cfunction(jl_entropy, Cint, (Any, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}))
 end
 
 function gather(ctx::Entropy)
