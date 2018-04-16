@@ -33,16 +33,15 @@ download_info = Dict(
 )
 
 # First, check to see if we're all satisfied
-if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUILD", false)
+if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUILD", "false") != "true"
     if haskey(download_info, platform_key()) && get(ENV, "FORCE_BUILD", "false") != "true" && !haskey(ENV, "USE_GPL_MBEDTLS")
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
         install(url, tarball_hash; prefix=prefix, force=true, verbose=verbose)
         Compat.@info "using prebuilt binaries"
-        write_deps_file(joinpath(@__DIR__, "deps.jl"), products)
     elseif all(satisfied(p; verbose=verbose) for p in juliaproducts) && get(ENV, "FORCE_BUILD", "false") != "true"
         Compat.@info "using julia-shippied binaries"
-        write_deps_file(joinpath(@__DIR__, "deps.jl"), juliaproducts)
+        products = juliaproducts
     else
         Compat.@info "attempting source build"
         VERSION = "2.7.0"
@@ -56,8 +55,8 @@ if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUIL
         end
         if any(!satisfied(p; verbose=verbose) for p in products)
             error("attempted to build mbedtls shared libraries, but they couldn't be located (deps/usr/lib)")
-        else
-            write_deps_file(joinpath(@__DIR__, "deps.jl"), products)
         end
     end
 end
+
+write_deps_file(joinpath(@__DIR__, "deps.jl"), products)

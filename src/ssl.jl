@@ -270,7 +270,33 @@ function Base.close(ctx::SSLContext)
     nothing
 end
 
-Base.isopen(ctx::SSLContext) = ctx.isopen && isopen(ctx.bio)
+function Base.isopen(ctx::SSLContext)
+
+    if !ctx.isopen || !isopen(ctx.bio)
+        return false
+    end
+
+    if bytesavailable(ctx.bio) == 0
+        # Ensure that libuv is processing data from this socket in case the peer
+        # has sent a close_notify message on an otherwise idle connection.
+        # https://tools.ietf.org/html/rfc5246#section-7.2.1
+        Base.start_reading(ctx.bio)
+        yield()
+    end
+
+    # Zero-byte read causes MbedTLS to process buffered data
+    # (which may include a close_notify message).
+    @lockdata ctx begin
+        n = ccall((:mbedtls_ssl_read, libmbedtls), Cint,
+              (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+                 ctx.data,     C_NULL,       0)
+        if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
+            ctx.isopen = false
+        end
+    end
+
+    return ctx.isopen && isopen(ctx.bio)
+end
 
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, libmbedtls), Ptr{Cvoid}, (Ptr{Cvoid},), ctx.data)
