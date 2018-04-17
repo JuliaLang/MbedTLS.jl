@@ -180,14 +180,13 @@ function handshake(ctx::SSLContext)
     end
     ctx.isopen = true
 
-    @schedule while ctx.isopen && isopen(ctx.bio)
+    @schedule while isopen(ctx)
         # Ensure that libuv is reading data from the socket in case the peer
         # has sent a close_notify message on an otherwise idle connection.
         # https://tools.ietf.org/html/rfc5246#section-7.2.1
         Base.start_reading(ctx.bio)
         wait(ctx.bio.readnotify)
         yield()
-        decrypt_available_bytes(ctx)
     end
 
     return
