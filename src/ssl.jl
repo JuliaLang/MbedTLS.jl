@@ -179,6 +179,16 @@ function handshake(ctx::SSLContext)
         wait(ctx)
     end
     ctx.isopen = true
+
+    @schedule while isopen(ctx)
+        # Ensure that libuv is reading data from the socket in case the peer
+        # has sent a close_notify message on an otherwise idle connection.
+        # https://tools.ietf.org/html/rfc5246#section-7.2.1
+        Base.start_reading(ctx.bio)
+        wait(ctx.bio.readnotify)
+        yield()
+    end
+
     return
 end
 
@@ -223,7 +233,7 @@ function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=tr
                    ctx.data, buf + nread, nbytes - nread)
         end
         if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || n == 0
-            ctx.isopen = false
+            close(ctx)
             err ? throw(EOFError()) : return nread
         elseif n == MBEDTLS_ERR_SSL_WANT_READ
             wait(ctx)
@@ -270,7 +280,35 @@ function Base.close(ctx::SSLContext)
     nothing
 end
 
-Base.isopen(ctx::SSLContext) = ctx.isopen && isopen(ctx.bio)
+function Base.isopen(ctx::SSLContext)
+
+    if !ctx.isopen || !isopen(ctx.bio)
+        return false
+    end
+
+    decrypt_available_bytes(ctx)
+
+    return ctx.isopen && isopen(ctx.bio)
+end
+
+function decrypt_available_bytes(ctx::SSLContext)
+
+    # Zero-byte read causes MbedTLS to call f_recv (always non-blocking)
+    # and decrypt any bytes that are already in the LibuvStream read buffer.
+    # https://esp32.com/viewtopic.php?t=1101#p4884
+    n = @lockdata ctx begin
+        ccall((:mbedtls_ssl_read, libmbedtls), Cint,
+              (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+                 ctx.data,     C_NULL,       0)
+    end
+    if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY
+        close(ctx)
+    elseif n == MBEDTLS_ERR_SSL_WANT_READ
+        # ignore
+    elseif n < 0
+        mbed_err(n)
+    end
+end
 
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, libmbedtls), Ptr{Cvoid}, (Ptr{Cvoid},), ctx.data)
@@ -299,15 +337,9 @@ end
 
 function _bytesavailable(ctx::SSLContext)
 
-    @lockdata ctx begin
+    decrypt_available_bytes(ctx)
 
-        # First do a zero-byte read.
-        # This causes MbedTLS to call f_recv (which is always non-blocking)
-        # and decrypt any bytes that are already in the LibuvStream read buffer.
-        # https://esp32.com/viewtopic.php?t=1101#p4884
-        ccall((:mbedtls_ssl_read, libmbedtls), Cint,
-              (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                 ctx.data,     C_NULL,       0)
+    @lockdata ctx begin
 
         # Now that the bufferd bytes have been processed, find out how many
         # decrypted bytes are available.
