@@ -185,7 +185,16 @@ function handshake(ctx::SSLContext)
         # has sent a close_notify message on an otherwise idle connection.
         # https://tools.ietf.org/html/rfc5246#section-7.2.1
         Base.start_reading(ctx.bio)
-        wait(ctx.bio.readnotify)
+        try
+            wait(ctx.bio.readnotify)
+        catch e
+            if e isa Base.UVError
+                # Ignore read errors (UVError ECONNRESET)
+                # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
+            else
+                rethrow(e)
+            end
+        end
         yield()
     end
 
