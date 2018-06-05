@@ -180,22 +180,42 @@ function handshake(ctx::SSLContext)
     end
     ctx.isopen = true
 
-    @async while isopen(ctx)
-        # Ensure that libuv is reading data from the socket in case the peer
-        # has sent a close_notify message on an otherwise idle connection.
-        # https://tools.ietf.org/html/rfc5246#section-7.2.1
-        Base.start_reading(ctx.bio)
-        try
-            wait(ctx.bio.readnotify)
-        catch e
-            if e isa Base.UVError
-                # Ignore read errors (UVError ECONNRESET)
-                # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
-            else
-                rethrow(e)
+    @static if VERSION < v"0.7.0-alpha.0"
+        @schedule while isopen(ctx)
+            # Ensure that libuv is reading data from the socket in case the peer
+            # has sent a close_notify message on an otherwise idle connection.
+            # https://tools.ietf.org/html/rfc5246#section-7.2.1
+            Base.start_reading(ctx.bio)
+            try
+                wait(ctx.bio.readnotify)
+            catch e
+                if e isa Base.UVError
+                    # Ignore read errors (UVError ECONNRESET)
+                    # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
+                else
+                    rethrow(e)
+                end
             end
+            yield()
         end
-        yield()
+    else
+        @async while isopen(ctx)
+            # Ensure that libuv is reading data from the socket in case the peer
+            # has sent a close_notify message on an otherwise idle connection.
+            # https://tools.ietf.org/html/rfc5246#section-7.2.1
+            Base.start_reading(ctx.bio)
+            try
+                wait(ctx.bio.readnotify)
+            catch e
+                if e isa Base.UVError
+                    # Ignore read errors (UVError ECONNRESET)
+                    # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
+                else
+                    rethrow(e)
+                end
+            end
+            yield()
+        end
     end
 
     return
