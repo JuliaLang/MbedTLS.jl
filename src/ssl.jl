@@ -382,6 +382,8 @@ function hostname!(ctx::SSLContext, hostname)
       (Ptr{Cvoid}, Cstring), ctx.data, hostname)
 end
 
+Compat.Sockets.getsockname(ctx::SSLContext) = Compat.Sockets.getsockname(ctx.bio)
+
 const c_send = Ref{Ptr{Cvoid}}(C_NULL)
 const c_recv = Ref{Ptr{Cvoid}}(C_NULL)
 const c_dbg = Ref{Ptr{Cvoid}}(C_NULL)
