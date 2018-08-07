@@ -207,8 +207,8 @@ function handshake(ctx::SSLContext)
             try
                 wait(ctx.bio.readnotify)
             catch e
-                if e isa Base.UVError
-                    # Ignore read errors (UVError ECONNRESET)
+                if e isa Base.IOError
+                    # Ignore read errors (IOError ECONNRESET)
                     # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
                 else
                     rethrow(e)

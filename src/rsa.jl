@@ -35,7 +35,7 @@ end
 
 function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
     # Export from GMP
-    size = ndigits(b, 2)
+    size = ndigits(b, base=2)
     nbytes = div(size+8-1,8)
     data = Vector{UInt8}(undef, nbytes)
     count = Ref{Csize_t}(0)

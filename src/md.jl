@@ -131,7 +131,7 @@ function _write(ctx::MD{true}, buf, size)
 end
 
 function Base.write(ctx::MD, buf::Vector)
-    isbits(eltype(buf)) || error("Expected a vector of bits types got $(typeof(buf))")
+    isbitstype(eltype(buf)) || error("Expected a vector of bits types got $(typeof(buf))")
     _write(ctx, buf, sizeof(buf))
 end
 # To avoid ambiguity warnings
