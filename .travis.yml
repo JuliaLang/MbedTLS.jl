@@ -7,14 +7,13 @@ os:
   - linux
   - osx
 julia:
-  - 0.6
   - 0.7
   - nightly
 notifications:
   email: false
 script:
     - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-    - julia -e 'Pkg.clone(pwd()); Pkg.build("MbedTLS")'
-    - julia -e 'Pkg.test("MbedTLS", coverage=true)'
+    - julia -e 'using Pkg; Pkg.clone(pwd()); Pkg.build("MbedTLS")'
+    - julia -e 'using Pkg; Pkg.test("MbedTLS", coverage=true)'
 after_success:
-    - julia -e 'cd(Pkg.dir("MbedTLS")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
+    - julia -e 'cd(using Pkg; Pkg.dir("MbedTLS")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
