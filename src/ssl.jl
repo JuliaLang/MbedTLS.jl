@@ -11,7 +11,7 @@ mutable struct SSLConfig
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-        @compat finalizer(conf->begin
+        finalizer(conf->begin
             ccall((:mbedtls_ssl_config_free, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
             Libc.free(conf.data)
         end, conf)
@@ -33,7 +33,7 @@ mutable struct SSLContext <: IO
         ctx.data = Libc.malloc(1000)  # 488
         ctx.datalock = ReentrantLock()
         ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_ssl_free, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
@@ -180,42 +180,22 @@ function handshake(ctx::SSLContext)
     end
     ctx.isopen = true
 
-    @static if VERSION < v"0.7.0-alpha.0"
-        @schedule while isopen(ctx)
-            # Ensure that libuv is reading data from the socket in case the peer
-            # has sent a close_notify message on an otherwise idle connection.
-            # https://tools.ietf.org/html/rfc5246#section-7.2.1
-            Base.start_reading(ctx.bio)
-            try
-                wait(ctx.bio.readnotify)
-            catch e
-                if e isa Base.UVError
-                    # Ignore read errors (UVError ECONNRESET)
-                    # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
-                else
-                    rethrow(e)
-                end
+    @async while isopen(ctx)
+        # Ensure that libuv is reading data from the socket in case the peer
+        # has sent a close_notify message on an otherwise idle connection.
+        # https://tools.ietf.org/html/rfc5246#section-7.2.1
+        Base.start_reading(ctx.bio)
+        try
+            wait(ctx.bio.readnotify)
+        catch e
+            if e isa Base.IOError
+                # Ignore read errors (IOError ECONNRESET)
+                # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
+            else
+                rethrow(e)
             end
-            yield()
         end
-    else
-        @async while isopen(ctx)
-            # Ensure that libuv is reading data from the socket in case the peer
-            # has sent a close_notify message on an otherwise idle connection.
-            # https://tools.ietf.org/html/rfc5246#section-7.2.1
-            Base.start_reading(ctx.bio)
-            try
-                wait(ctx.bio.readnotify)
-            catch e
-                if e isa Base.IOError
-                    # Ignore read errors (IOError ECONNRESET)
-                    # https://github.com/JuliaWeb/MbedTLS.jl/issues/148
-                else
-                    rethrow(e)
-                end
-            end
-            yield()
-        end
+        yield()
     end
 
     return
@@ -382,7 +362,7 @@ function hostname!(ctx::SSLContext, hostname)
       (Ptr{Cvoid}, Cstring), ctx.data, hostname)
 end
 
-Compat.Sockets.getsockname(ctx::SSLContext) = Compat.Sockets.getsockname(ctx.bio)
+Sockets.getsockname(ctx::SSLContext) = Sockets.getsockname(ctx.bio)
 
 const c_send = Ref{Ptr{Cvoid}}(C_NULL)
 const c_recv = Ref{Ptr{Cvoid}}(C_NULL)

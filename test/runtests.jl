@@ -1,4 +1,4 @@
-using MbedTLS, Compat, Compat.Test, Compat.Random
+using MbedTLS, Test, Random
 
 @static if isdefined(Base, :_sockname)
     import Base: connect

@@ -23,7 +23,7 @@ mutable struct MD{IsHMAC} <: IO
         ctx = new{IsHMAC}()
         ctx.data = Libc.malloc(50)  # 24
         ccall((:mbedtls_md_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_md_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)

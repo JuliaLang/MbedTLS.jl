@@ -5,7 +5,7 @@ mutable struct CRT
         c = new()
         c.data = Libc.malloc(1000)  # 552
         ccall((:mbedtls_x509_crt_init, libmbedx509), Cvoid, (Ptr{Cvoid},), c.data)
-        @compat finalizer(c->begin
+        finalizer(c->begin
             ccall((:mbedtls_x509_crt_free, libmbedx509), Cvoid, (Ptr{Cvoid},), c.data)
             Libc.free(c.data)
         end, c)

@@ -25,7 +25,7 @@ mutable struct RSA
         ccall((:mbedtls_rsa_init, libmbedcrypto), Cvoid,
             (Ptr{Cvoid}, Cint, Cint),
             ctx.data, padding, hash_id)
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_rsa_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
