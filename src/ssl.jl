@@ -338,13 +338,7 @@ function get_ciphersuite(ctx::SSLContext)
     return unsafe_string(data)
 end
 
-@static if isdefined(Base, :bytesavailable)
-    Base.bytesavailable(ctx::SSLContext) = _bytesavailable(ctx)
-else
-    Base.nb_available(ctx::SSLContext) = _bytesavailable(ctx)
-end
-
-function _bytesavailable(ctx::SSLContext)
+function Base.bytesavailable(ctx::SSLContext)
 
     decrypt_available_bytes(ctx)
 

@@ -1,10 +1,6 @@
 using MbedTLS, Test, Random
 
-@static if isdefined(Base, :_sockname)
-    import Base: connect
-else
-    import Sockets: connect
-end
+import Sockets: connect
 
 # Message digests
 @test digest(MD_SHA256, "test", "secret") ==

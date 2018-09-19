@@ -192,9 +192,7 @@ function get_key_bitlen(cipher::Cipher)
 end
 
 tobytes(x::Vector{UInt8}) = x
-@static if isdefined(Base, :CodeUnits)
 tobytes(x::Base.CodeUnits) = x
-end
 tobytes(x) = codeunits(x)
 
 function set_key!(cipher::Cipher, key, op::Operation)
