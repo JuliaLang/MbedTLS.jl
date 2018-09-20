@@ -1,6 +1,6 @@
 module MbedTLS
 
-using Random
+using Random, Sockets
 import Sockets: TCPSocket
 
 export

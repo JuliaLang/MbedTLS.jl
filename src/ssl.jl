@@ -214,8 +214,6 @@ function alpn_proto(ctx::SSLContext)
     unsafe_string(rv)
 end
 
-import Base: unsafe_read, unsafe_write
-
 function Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
     nw = 0
     while nw < N
