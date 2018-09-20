@@ -1,17 +1,7 @@
-VERSION < v"0.7.0-beta2.199" && __precompile__()
 module MbedTLS
 
-using Compat, Compat.Random
-
-@static if VERSION >= v"0.7.0-DEV.4442"
-    import Sockets: TCPSocket
-end
-
-@static if VERSION < v"0.7.0-DEV.4749"
-    macro cfunction(f, r, argtypes)
-        esc(:(cfunction($f, $r, Tuple{$(argtypes)...})))
-    end
-end
+using Random, Sockets
+import Sockets: TCPSocket
 
 export
 # Message digests
@@ -72,7 +62,6 @@ function __init__()
     __sslinit__()
     __entropyinit__()
 end
-__init__()
 
 tls_dbg(level, filename, number, msg) = warn("MbedTLS emitted debug info: $msg in $filename:$number")
 

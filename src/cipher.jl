@@ -96,7 +96,7 @@ mutable struct Cipher
         ccall((:mbedtls_cipher_init, libmbedcrypto), Cvoid,
             (Ptr{Cvoid},), ctx.data)
 
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_cipher_free, libmbedcrypto), Cvoid,
                 (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
@@ -192,9 +192,7 @@ function get_key_bitlen(cipher::Cipher)
 end
 
 tobytes(x::Vector{UInt8}) = x
-@static if isdefined(Base, :CodeUnits)
 tobytes(x::Base.CodeUnits) = x
-end
 tobytes(x) = codeunits(x)
 
 function set_key!(cipher::Cipher, key, op::Operation)
@@ -252,18 +250,6 @@ function process_iv(iv, cipher)
         iv_b = tobytes(iv)
         iv_b, sizeof(iv_b)
     end
-end
-
-@static if VERSION < v"0.7.0-DEV.3017"
-function process_iv(iv::Nullable, cipher)
-    if isnull(iv)  # Return a default IV
-        # todo: Don't hard-code a block size (this assumes 128-bit, as for AES)
-        # todo: Think about what appropriate default (if any) should be used here
-        zeros(Int8, 16), 16
-    else
-        process_iv(get(iv))
-    end
-end
 end
 
 function process_iv(iv::Nothing, cipher)

@@ -7,7 +7,7 @@ mutable struct Entropy
         ctx.data = Libc.malloc(100000)  # Exact byte count is 75088; playing it safe with some buffer
         ctx.sources = Any[]
         ccall((:mbedtls_entropy_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_entropy_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)

@@ -25,7 +25,7 @@ mutable struct RSA
         ccall((:mbedtls_rsa_init, libmbedcrypto), Cvoid,
             (Ptr{Cvoid}, Cint, Cint),
             ctx.data, padding, hash_id)
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_rsa_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
@@ -52,11 +52,6 @@ end
 
 function mpi_size(mpi::Ptr{mbedtls_mpi})
     ccall((:mbedtls_mpi_size, libmbedcrypto), Csize_t, (Ptr{mbedtls_mpi},), mpi)
-end
-
-# 0.4 had a buggy implementation of fieldoffset (off by one)
-if !isdefined(Base, :fieldoffset) && isdefined(Base, :field_offset)
-    fieldoffset(T, i) = Base.field_offset(T, i - 1)
 end
 
 function pubkey_from_vals!(ctx::RSA, e::BigInt, n::BigInt)

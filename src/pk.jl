@@ -7,7 +7,7 @@ mutable struct PKContext
 
         ccall((:mbedtls_pk_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
 
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_pk_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
@@ -44,10 +44,6 @@ function parse_public_key!(ctx::PKContext, key)
     @err_check ccall((:mbedtls_pk_parse_public_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cuchar}, Csize_t),
         ctx.data, key_bs, sizeof(key_bs) + 1)
-end
-
-@static if VERSION < v"0.7.0-DEV.3017"
-parse_key!(ctx::PKContext, key, maybe_pw::Nullable) = parse_key!(ctx, key, isnull(maybe_pw) ? nothing : get(maybe_pw))
 end
 
 function parse_key!(ctx::PKContext, key, maybe_pw = nothing)

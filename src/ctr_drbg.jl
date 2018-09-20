@@ -6,7 +6,7 @@ mutable struct CtrDrbg  <: AbstractRNG
         ctx = new()
         ctx.data = Libc.malloc(1000)  # 344
         ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
-        @compat finalizer(ctx->begin
+        finalizer(ctx->begin
             ccall((:mbedtls_ctr_drbg_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)

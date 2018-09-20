@@ -1,4 +1,4 @@
-using BinaryProvider, Compat, Compat.Libdl
+using BinaryProvider, Libdl
 
 # Parse some basic command-line arguments
 const verbose = "--verbose" in ARGS
@@ -9,7 +9,7 @@ products = [
     LibraryProduct(prefix, String["libmbedx509"], :libmbedx509),
 ]
 
-const juliaprefix = joinpath(Compat.Sys.BINDIR, "..")
+const juliaprefix = joinpath(Sys.BINDIR, "..")
 
 juliaproducts = Product[
     LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
@@ -43,12 +43,12 @@ if any(!satisfied(p; verbose=verbose) for p in products) || get(ENV, "FORCE_BUIL
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
         install(url, tarball_hash; prefix=prefix, force=true, verbose=verbose)
-        Compat.@info "using prebuilt binaries"
+        @info "using prebuilt binaries"
     elseif all(satisfied(p; verbose=verbose) for p in juliaproducts) && get(ENV, "FORCE_BUILD", "false") != "true"
-        Compat.@info "using julia-shippied binaries"
+        @info "using julia-shippied binaries"
         products = juliaproducts
     else
-        Compat.@info "attempting source build"
+        @info "attempting source build"
         VERSION = "2.7.0"
         url, hash = haskey(ENV, "USE_GPL_MBEDTLS") ?
             ("https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz", "2c6fe289b4b50bf67b4839e81b07fcf52a19f5129d0241d2aa4d49cb1ef11e4f") :
