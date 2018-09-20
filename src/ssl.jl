@@ -111,23 +111,25 @@ end
 
 function f_send(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    return Cint(unsafe_write(jl_ctx, c_msg, sz))
+    return Cint(unsafe_write(jl_ctx.bio, c_msg, sz))
 end
 
 function f_recv(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
-    n = bytesavailable(jl_ctx)
+    n = bytesavailable(jl_ctx.bio)
     if n == 0
-        return Cint(MBEDTLS_ERR_SSL_WANT_READ)
+        return isopen(jl_ctx.bio) ? Cint(MBEDTLS_ERR_SSL_WANT_READ) :
+                    jl_ctx.isopen ? Cint(MBEDTLS_ERR_NET_CONN_RESET) :
+                                    Cint(n)
     end
     n = min(sz, n)
-    unsafe_read(jl_ctx, c_msg, n)
+    unsafe_read(jl_ctx.bio, c_msg, n)
     return Cint(n)
 end
 
 function set_bio!(ssl_ctx::SSLContext, jl_ctx::T) where {T<:IO}
     ssl_ctx.bio = jl_ctx
-    set_bio!(ssl_ctx, pointer_from_objref(ssl_ctx.bio), c_send[], c_recv[])
+    set_bio!(ssl_ctx, pointer_from_objref(ssl_ctx), c_send[], c_recv[])
     nothing
 end
 
