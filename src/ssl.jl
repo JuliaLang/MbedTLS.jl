@@ -111,6 +111,7 @@ end
 
 function f_send(c_ctx, c_msg, sz)
     jl_ctx = unsafe_pointer_to_objref(c_ctx)
+    !isopen(jl_ctx.bio) && return Cint(MBEDTLS_ERR_NET_CONN_RESET)
     return Cint(unsafe_write(jl_ctx.bio, c_msg, sz))
 end
 
