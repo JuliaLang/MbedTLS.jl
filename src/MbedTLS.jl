@@ -63,7 +63,7 @@ function __init__()
     __entropyinit__()
 end
 
-tls_dbg(level, filename, number, msg) = warn("MbedTLS emitted debug info: $msg in $filename:$number")
+tls_dbg(level, filename, number, msg) = @warn "MbedTLS emitted debug info: $msg in $filename:$number"
 
 # already defined SSLConfig and SSLContext types in ssl.jl
 function SSLConfig(cert_file, key_file)
