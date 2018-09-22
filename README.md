@@ -6,6 +6,8 @@
 
 A wrapper around the [mbed](https://tls.mbed.org/) TLS and cryptography C libary.
 
+Current supported mbedtls version: 2.13.1
+
 Usage:
 
 ```julia
