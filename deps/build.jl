@@ -46,7 +46,7 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
         # Download and install binaries
         url, tarball_hash = download_info[platform_key()]
         install(url, tarball_hash; prefix=prefix, force=true, verbose=verbose)
-        done = satisfied(p; verbose=verbose) for p in products)
+        done = all(satisfied(p; verbose=verbose) for p in products)
         done && @info "using prebuilt binaries"
     end
     if !done && all(satisfied(p; verbose=verbose) for p in juliaproducts) && !forcebuild
