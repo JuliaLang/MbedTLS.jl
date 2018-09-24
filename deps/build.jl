@@ -51,7 +51,7 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
     end
     if !done && all(satisfied(p; verbose=verbose) for p in juliaproducts) && !forcebuild
         products = juliaproducts
-    else
+    elseif !done || forcebuild
         Compat.@info "attempting source build"
         VERSION = "2.13.0"
         url, hash = haskey(ENV, "USE_GPL_MBEDTLS") ?
