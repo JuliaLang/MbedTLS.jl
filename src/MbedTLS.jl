@@ -13,6 +13,8 @@ end
     end
 end
 
+const DEBUG_LEVEL = 0
+
 export
 # Message digests
     MD_NONE,
