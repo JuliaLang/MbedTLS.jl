@@ -105,6 +105,7 @@ function ssl_abandon(ctx::SSLContext)                                           
     ctx.bytesavailable = 0
     ctx.close_notify_sent = true
     close(ctx.bio)
+    # FIXME probably should ssl_session_reset(ctx)
 end
 
 
@@ -299,8 +300,9 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
     try
         while true
 
-            n = ssl_read(ctx, buf + nread, nbytes - nread)                      ;@😬 "ssl_read ⬅️  $n"
-
+            n = ssl_read(ctx, buf + nread, nbytes - nread)                      ;@😬 "ssl_read ⬅️  $n $(n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY : "(CLOSE_NOTIFY)" ?
+                                                                                                             MBEDTLS_ERR_NET_CONN_RESET        : "(CONN_RESET)" ?
+                                                                                                             MBEDTLS_ERR_SSL_WANT_READ         : "(WANT_READ)")"
             if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY ||
                n == MBEDTLS_ERR_NET_CONN_RESET
                 ssl_abandon(ctx)
