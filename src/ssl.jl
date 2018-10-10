@@ -43,27 +43,12 @@ mutable struct SSLContext <: IO
     end
 end
 
-macro lockdata(ctx, expr)
-    esc(quote
-        lock($ctx.datalock)
-        @assert $ctx.datalock.reentrancy_cnt == 1
-        try
-            $expr
-        finally
-            unlock($ctx.datalock)
-        end
-    end)
-end
-
 
 # Handshake
 
 function handshake(ctx::SSLContext)
     while true
-        n = @lockdata ctx begin
-            ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
-                  (Ptr{Cvoid},), ctx.data)
-        end
+        n = ssl_handshake(ctx)
         if n == 0
             break
         end
@@ -155,23 +140,23 @@ end
 Send a TLS `close_notify` message to the peer.
 """
 function Base.close(ctx::SSLContext)
-    @lockdata ctx begin
+
         if isopen(ctx.bio)
             try
                 # This is ugly, but a harmless broken pipe exception will be
                 # thrown if the peer closes the connection without responding
-                ccall((:mbedtls_ssl_close_notify, libmbedtls),
-                       Cint, (Ptr{Cvoid},), ctx.data)
+                ssl_close_notify(ctx)
             catch
             end
             close(ctx.bio)
         end
         ctx.isopen = false
-    end
     nothing
 end
 
+if isdefined(Compat, :Sockets)
 Compat.Sockets.getsockname(ctx::SSLContext) = Compat.Sockets.getsockname(ctx.bio)
+end
 
 
 # Sending Data
@@ -187,11 +172,7 @@ See `f_send` and `set_bio!` below.
 function Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt)
     nw = 0
     while nw < N
-        ret = @lockdata ctx begin
-            ccall((:mbedtls_ssl_write, libmbedtls), Cint,
-                  (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                  ctx.data, msg, N - nw)
-        end
+        ret = ssl_write(ctx, msg, N - nw)
         ret < 0 && mbed_err(ret)
         nw += ret
         msg += ret
@@ -226,11 +207,7 @@ end
 function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt; err=true)
     nread::UInt = 0
     while nread < nbytes
-        n = @lockdata ctx begin
-            ccall((:mbedtls_ssl_read, libmbedtls), Cint,
-                   (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                   ctx.data, buf + nread, nbytes - nread)
-        end
+        n = ssl_read(ctx, buf + nread, nbytes - nread)
         if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || n == 0
             close(ctx)
             err ? throw(EOFError()) : return nread
@@ -344,12 +321,8 @@ function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
 end
 
 function setup!(ctx::SSLContext, conf::SSLConfig)
-    @lockdata ctx begin
-        ctx.config = conf
-        @err_check ccall((:mbedtls_ssl_setup, libmbedtls), Cint,
-            (Ptr{Cvoid}, Ptr{Cvoid}),
-            ctx.data, conf.data)
-    end
+    ctx.config = conf
+    ssl_setup(ctx, conf)
 end
 
 function dbg!(conf::SSLConfig, f::Ptr{Cvoid}, p)
@@ -401,6 +374,18 @@ end
 
 # C API
 
+macro lockdata(ctx, expr)
+    esc(quote
+        lock($ctx.datalock)
+        @assert $ctx.datalock.reentrancy_cnt == 1
+        try
+            $expr
+        finally
+            unlock($ctx.datalock)
+        end
+    end)
+end
+
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, libmbedtls), Ptr{Cvoid}, (Ptr{Cvoid},), ctx.data)
     return CRT(data)
@@ -420,11 +405,140 @@ function get_ciphersuite(ctx::SSLContext)
     return unsafe_string(data)
 end
 
+function ssl_setup(ctx::SSLContext, conf::SSLConfig)
+    @lockdata ctx begin
+        @err_check ccall((:mbedtls_ssl_setup, libmbedtls), Cint,
+            (Ptr{Cvoid}, Ptr{Cvoid}),
+            ctx.data, conf.data)
+    end
+end
+
+function ssl_handshake(ctx::SSLContext)
+    n = @lockdata ctx begin
+        ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
+              (Ptr{Cvoid},), ctx.data)
+    end
+end
+
+"""
+Return the number of application data bytes remaining to be read
+from the current record.
+
+https://tls.mbed.org/api/ssl_8h.html#ad43142085f3182e9b0dc967ec582032b:
+"""
+function ssl_get_bytes_avail(ctx::SSLContext)::Int
+    @lockdata ctx begin
+        return ccall((:mbedtls_ssl_get_bytes_avail, libmbedtls),
+                     Csize_t, (Ptr{Cvoid},), ctx.data)
+    end
+end
+
+"""
+    ssl_check_pending(::SSLContext)::Bool
+
+Check if there is data already read from the underlying transport
+but not yet processed.
+
+If the SSL/TLS module successfully returns from an operation - e.g.
+a handshake or an application record read - and you're awaiting
+incoming data next, you must not immediately idle on the underlying
+transport to have data ready, but you need to check the value of
+this function first.  The reason is that the desired data might
+already be read but not yet processed.  If, in contrast, a previous
+call to the SSL/TLS module returned MBEDTLS_ERR_SSL_WANT_READ, it
+is not necessary to call this function, as the latter error code
+entails that all internal data has been processed.
+
+https://tls.mbed.org/api/ssl_8h.html#a4075f7de9877fd667bcfa2e819e33426
+"""
+function ssl_check_pending(ctx::SSLContext)::Bool
+    @lockdata ctx begin
+	return ccall((:mbedtls_ssl_check_pending, libmbedtls),
+		     Cint, (Ptr{Cvoid},), ctx.data) > 0
+    end
+end
+
 function set_bio!(ssl_ctx::SSLContext, ctx, f_send::Ptr{Cvoid}, f_recv::Ptr{Cvoid})
     @lockdata ssl_ctx begin
         ccall((:mbedtls_ssl_set_bio, libmbedtls), Cvoid,
             (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
             ssl_ctx.data, ctx, f_send, f_recv, C_NULL)
+    end
+end
+
+"""
+    ssl_read(::SSLContext, ptr, n)
+
+Returns One of the following:
+0 if the read end of the underlying transport was closed,
+the (positive) number of bytes read, or
+a negative error code on failure.
+
+If MBEDTLS_ERR_SSL_WANT_READ is returned, no application data is
+available from the underlying transport. In this case, the function
+needs to be called again at some later stage.
+
+
+If this function returns something other than a positive value or
+MBEDTLS_ERR_SSL_WANT_READ/WRITE or MBEDTLS_ERR_SSL_CLIENT_RECONNECT,
+you must stop using the SSL context for reading or writing, and
+either free it or call mbedtls_ssl_session_reset() on it before
+re-using it for a new connection; the current connection must be
+closed.
+
+https://tls.mbed.org/api/ssl_8h.html#aa2c29eeb1deaf5ad9f01a7515006ede5
+"""
+function ssl_read(ctx::SSLContext, ptr, n)::Int
+    @lockdata ctx begin
+        return ccall((:mbedtls_ssl_read, libmbedtls), Cint,
+                     (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+                     ctx.data, ptr, n)
+    end
+end
+
+"""
+    ssl_write(::SSLContext, ptr, n)
+
+When this function returns MBEDTLS_ERR_SSL_WANT_WRITE/READ, it must
+be called later with the same arguments, until it returns a value
+greater that or equal to 0. When the function returns
+MBEDTLS_ERR_SSL_WANT_WRITE there may be some partial data in the
+output buffer, however this is not yet sent.
+
+If this function returns something other than 0, a positive value
+or MBEDTLS_ERR_SSL_WANT_READ/WRITE, you must stop using the SSL
+context for reading or writing, and either free it or call
+mbedtls_ssl_session_reset() on it before re-using it for a new
+connection; the current connection must be closed.
+
+https://tls.mbed.org/api/ssl_8h.html#a5bbda87d484de82df730758b475f32e5
+"""
+function ssl_write(ctx::SSLContext, ptr, n)::Int
+    @lockdata ctx begin
+        return ccall((:mbedtls_ssl_write, libmbedtls), Cint,
+                     (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+                     ctx.data, ptr, n)
+    end
+end
+
+"""
+    ssl_close_notify(::SSLContext)
+
+Notify the peer that the connection is being closed.
+0 if successful, or a specific SSL error code.
+
+If this function returns something other than 0 or
+MBEDTLS_ERR_SSL_WANT_READ/WRITE, you must stop using the SSL context
+for reading or writing, and either free it or call
+mbedtls_ssl_session_reset() on it before re-using it for a new
+connection; the current connection must be closed.
+
+https://tls.mbed.org/api/ssl_8h.html#ac2c1b17128ead2df3082e27b603deb4c
+"""
+function ssl_close_notify(ctx::SSLContext)
+    @lockdata ctx begin
+        return ccall((:mbedtls_ssl_close_notify, libmbedtls),
+                     Cint, (Ptr{Cvoid},), ctx.data)
     end
 end
 
