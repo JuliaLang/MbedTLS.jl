@@ -50,6 +50,7 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
         done && Compat.@info "using prebuilt binaries"
     end
     if !done && all(satisfied(p; verbose=verbose) for p in juliaproducts) && !forcebuild
+        Compat.@info "attempting source build"
         products = juliaproducts
     elseif !done || forcebuild
         Compat.@info "attempting source build"
