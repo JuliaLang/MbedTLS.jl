@@ -426,7 +426,7 @@ The amount of decrypted data that can be read at once is limited by
 """
 function Base.readavailable(ctx::SSLContext)
     n = UInt(MBEDTLS_SSL_MAX_CONTENT_LEN)
-    buf = Vector{UInt8}(#=undef,=# n)
+    buf = Vector{UInt8}(undef, n)
     n = ssl_unsafe_read(ctx, pointer(buf), n)                                   ;@😬 "readavailable ⬅️  $n"
     return resize!(buf, n)
 end
