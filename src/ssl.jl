@@ -341,7 +341,7 @@ function wait_for_encrypted_data(ctx)
     try
         eof(ctx.bio)
     catch e
-        if !(e isa Base.UVError) || e.code != Base.UV_ECONNRESET
+        if !(e isa Base.IOError) || e.code != Base.UV_ECONNRESET
             rethrow(e)
         end
     end
