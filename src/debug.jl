@@ -1,6 +1,7 @@
+using Dates
 const DEBUG_LEVEL = 0
 
-taskid(t=current_task()) = hex(hash(t) & 0xffff, 4)
+taskid(t=current_task()) = string(hash(t) & 0xffff, base=16, pad=4)
 debug_header() = string("MBTLS: ", rpad(Dates.now(), 24), taskid(), " ")
 
 macro debug(n::Int, s)
