@@ -232,3 +232,26 @@ let
     digest3 = MbedTLS.finish!(md)
     @test digest1 ≠ digest3
 end
+
+# log_secrets
+mktempdir() do d
+
+    f = joinpath(d, "secrets.log")
+
+    testhost = "httpbin.org"
+    sock = connect(testhost, 443)
+
+    ctx = MbedTLS.SSLContext()
+    conf = MbedTLS.SSLConfig(true; log_secrets=f)
+
+    MbedTLS.setup!(ctx, conf)
+    MbedTLS.set_bio!(ctx, sock)
+    MbedTLS.hostname!(ctx, testhost)
+    MbedTLS.handshake(ctx)
+
+    write(ctx, "GET / HTTP/1.1\r\nHost: $testhost\r\n\r\n")
+    buf = String(read(ctx, 100))
+    @test occursin(r"^HTTP/1.1 200 OK", buf)
+    @test occursin(r"^CLIENT_RANDOM [0-9a-f]{64} [0-9a-f]{96}$", read(f, String))
+
+end

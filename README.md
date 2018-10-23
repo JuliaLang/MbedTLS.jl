@@ -41,3 +41,23 @@ write(ctx, "GET / HTTP/1.1\r\nHost: httpbin.org\r\n\r\n")
 buf = String(read(ctx, 100))
 @test ismatch(r"^HTTP/1.1 200 OK", buf)
 ```
+
+Debugging with Wireshark.
+
+MbedTLS.jl can optionally log TLS session keys in
+[NSS Key Log Format](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format).
+
+e.g.
+```julia
+using HTTP
+using MbedTLS
+c = MbedTLS.SSLConfig(true, log_secrets="/Users/sam/stuff/secret_key_log")
+HTTP.get("https://httpbin.org/ip", sslconfig=c)
+```
+
+Wireshark can be configrued to decrypt SSL traffic by setting the location
+of the key log file under:
+
+    Wireshark Preferences -> Protocols -> SSL; (Pre-)Master Secret log filename.
+
+See: https://sharkfesteurope.wireshark.org/assets/presentations17eu/15.pdf

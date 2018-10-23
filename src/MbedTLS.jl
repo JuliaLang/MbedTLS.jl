@@ -65,6 +65,40 @@ end
 
 tls_dbg(level, filename, number, msg) = @warn "MbedTLS emitted debug info: $msg in $filename:$number"
 
+secrets_log = ""
+secrets_log_file = ""
+secrets_log_state = :incomplete
+
+function tls_dbg_log_secrets(level, filename, number, msg)
+    global secrets_log
+    global secrets_log_file
+    global secrets_log_state
+    if secrets_log_state == :complete
+        return
+    elseif msg == "dumping 'client hello, random bytes' (32 bytes)\n"
+        secrets_log = "CLIENT_RANDOM "
+        secrets_log_state = :client_random
+    elseif msg == "dumping 'master secret' (48 bytes)\n"
+        secrets_log_state = :master_secret
+        secrets_log *= " "
+    elseif secrets_log_state in (:client_random, :master_secret)
+        if occursin(r"^00[0-2]0:", msg)
+            secrets_log *= join(split(msg)[2:17])
+        else
+            if secrets_log_state == :master_secret
+                secrets_log *= "\n"
+                open(secrets_log_file, append=true) do io
+                    write(io, secrets_log)
+                end
+                secrets_log_state = :incomplete
+                secrets_log = ""
+            else
+                secrets_log_state = :incomplete
+            end
+        end
+    end
+end
+
 # already defined SSLConfig and SSLContext types in ssl.jl
 function SSLConfig(cert_file, key_file)
     ssl_cert = MbedTLS.crt_parse_file(cert_file)
@@ -80,7 +114,7 @@ function SSLConfig(cert_file, key_file)
     return conf
 end
 
-function SSLConfig(verify::Bool)
+function SSLConfig(verify::Bool; log_secrets=nothing)
     conf = MbedTLS.SSLConfig()
     MbedTLS.config_defaults!(conf)
 
@@ -91,7 +125,13 @@ function SSLConfig(verify::Bool)
 
     MbedTLS.authmode!(conf,
       verify ? MbedTLS.MBEDTLS_SSL_VERIFY_REQUIRED : MbedTLS.MBEDTLS_SSL_VERIFY_NONE)
-    MbedTLS.dbg!(conf, tls_dbg)
+    if log_secrets !== nothing
+        global secrets_log_file = log_secrets
+        set_dbg_level(4)
+        MbedTLS.dbg!(conf, tls_dbg_log_secrets)
+    else
+        MbedTLS.dbg!(conf, tls_dbg)
+    end
     MbedTLS.ca_chain!(conf)
     conf
 end
