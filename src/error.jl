@@ -21,5 +21,10 @@ function strerror(ret, bufsize=1000)
     ccall((:mbedtls_strerror, libmbedcrypto), Cint,
         (Cint, Ptr{Cvoid}, Csize_t),
         ret, buf, bufsize)
-    unsafe_string(pointer(buf))
+    s = unsafe_string(pointer(buf))
+    if ret == MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE
+        s *= " (You may need to enable `ssl_conf_renegotiation!`. See " *
+        "https://github.com/JuliaWeb/HTTP.jl/issues/342#issuecomment-432921180)"
+    end
+    return s
 end

@@ -34,6 +34,7 @@ mutable struct SSLContext <: IO
     isreadable::Bool
     bytesavailable::Int
     close_notify_sent::Bool
+    async_exception::Union{Nothing,MbedException}
     bio
 
     function SSLContext()
@@ -44,6 +45,7 @@ mutable struct SSLContext <: IO
         ctx.isreadable = false
         ctx.bytesavailable = -1
         ctx.close_notify_sent = false
+        ctx.async_exception = nothing
         ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(ctx->begin
             ccall((:mbedtls_ssl_free, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
@@ -78,15 +80,28 @@ function handshake(ctx::SSLContext)
     ctx.bytesavailable = 0
     ctx.close_notify_sent = false
 
-    @async while ctx.isreadable
-        wait_for_decrypted_data(ctx)
-        while ctx.bytesavailable > 0
-            sleep(5)
+    @async try
+        while ctx.isreadable
+            wait_for_decrypted_data(ctx)
+            while ctx.bytesavailable > 0
+                sleep(5)
+            end
         end
+    catch e
+        ctx.async_exception = e
     end
 
     nothing
 end
+
+function check_async_exception(ctx::SSLContext)
+    if ctx.async_exception !== nothing
+        e = ctx.async_exception
+        ctx.async_exception = nothing
+        throw(e)
+    end
+end
+
 
 
 # Fatal Errors
@@ -256,6 +271,7 @@ While there are no decrypted bytes available but the connection is readable:
 function wait_for_decrypted_data(ctx)
     lock(ctx.waitlock)
     try
+        check_async_exception(ctx)
         while ctx.isreadable && ctx.bytesavailable <= 0
             if !ssl_check_pending(ctx)                                          ;@🤖 "wait_for_encrypted_data ⌛️";
                 wait_for_encrypted_data(ctx)
@@ -292,6 +308,8 @@ Throws a `MbedException` if `ssl_read` returns an unhandled error code.
 When an unhandled exception occurs `isreadable` is set to false.
 """
 function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
+
+    check_async_exception(ctx)
 
     ctx.isreadable ||
     throw(ArgumentError("`ssl_unsafe_read` requires `isreadable(::SSLContext)`"))
@@ -466,6 +484,17 @@ function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__F
     ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         config.data, chain.data, C_NULL)
+end
+
+"""
+Enable / Disable renegotiation support for connection when initiated by peer
+(MBEDTLS_SSL_RENEGOTIATION_ENABLED or MBEDTLS_SSL_RENEGOTIATION_DISABLED).
+See: https://tls.mbed.org/api/ssl_8h.html#aad4f50fc1c0a018fd5eb18fd9621d0d3
+"""
+function ssl_conf_renegotiation!(config::SSLConfig, renegotiation)
+    ccall((:mbedtls_ssl_conf_renegotiation, libmbedtls), Cvoid,
+        (Ptr{Cvoid}, Cint),
+        config.data, renegotiation)
 end
 
 function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
