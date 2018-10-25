@@ -94,6 +94,15 @@ function handshake(ctx::SSLContext)
     nothing
 end
 
+function check_async_exception(ctx::SSLContext)
+    if ctx.async_exception !== nothing
+        e = ctx.async_exception
+        ctx.async_exception = nothing
+        throw(e)
+    end
+end
+
+
 
 # Fatal Errors
 
@@ -262,9 +271,7 @@ While there are no decrypted bytes available but the connection is readable:
 function wait_for_decrypted_data(ctx)
     lock(ctx.waitlock)
     try
-        if ctx.async_exception !== nothing
-            throw(ctx.async_exception)
-        end
+        check_async_exception(ctx)
         while ctx.isreadable && ctx.bytesavailable <= 0
             if !ssl_check_pending(ctx)                                          ;@🤖 "wait_for_encrypted_data ⌛️";
                 wait_for_encrypted_data(ctx)
@@ -302,9 +309,7 @@ When an unhandled exception occurs `isreadable` is set to false.
 """
 function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
 
-    if ctx.async_exception !== nothing
-        throw(ctx.async_exception)
-    end
+    check_async_exception(ctx)
 
     ctx.isreadable ||
     throw(ArgumentError("`ssl_unsafe_read` requires `isreadable(::SSLContext)`"))
@@ -481,10 +486,15 @@ function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__F
         config.data, chain.data, C_NULL)
 end
 
-function ssl_conf_renegotiation!(config::SSLConfig, x)
+"""
+Enable / Disable renegotiation support for connection when initiated by peer
+(MBEDTLS_SSL_RENEGOTIATION_ENABLED or MBEDTLS_SSL_RENEGOTIATION_DISABLED).
+See: https://tls.mbed.org/api/ssl_8h.html#aad4f50fc1c0a018fd5eb18fd9621d0d3
+"""
+function ssl_conf_renegotiation!(config::SSLConfig, renegotiation)
     ccall((:mbedtls_ssl_conf_renegotiation, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Cint),
-        config.data, x)
+        config.data, renegotiation)
 end
 
 function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
