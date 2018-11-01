@@ -16,9 +16,13 @@ mutable struct SSLConfig
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-        finalizer(conf->begin
-            ccall((:mbedtls_ssl_config_free, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-            Libc.free(conf.data)
+        finalizer(x->begin
+            data = x.data
+            @async begin
+                ccall((:mbedtls_ssl_config_free, libmbedtls),
+                      Cvoid, (Ptr{Cvoid},), data)
+                Libc.free(data)
+            end
         end, conf)
         conf
     end
@@ -47,9 +51,13 @@ mutable struct SSLContext <: IO
         ctx.close_notify_sent = false
         ctx.async_exception = nothing
         ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
-        finalizer(ctx->begin
-            ccall((:mbedtls_ssl_free, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
-            Libc.free(ctx.data)
+        finalizer(x->begin
+            data = x.data
+            @async begin
+                ccall((:mbedtls_ssl_free, libmbedtls),
+                      Cvoid, (Ptr{Cvoid},), ctx.data)
+                Libc.free(ctx.data)
+            end
         end, ctx)
         ctx
     end
