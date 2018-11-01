@@ -120,7 +120,8 @@ function ssl_abandon(ctx::SSLContext)                                           
     ctx.bytesavailable = 0
     ctx.close_notify_sent = true
     close(ctx.bio)
-    # FIXME probably should ssl_session_reset(ctx)
+    n = ssl_session_reset(ctx)
+    n == 0 || throw(MbedException(n))
 end
 
 
@@ -717,6 +718,17 @@ https://tls.mbed.org/api/ssl_8h.html#ac2c1b17128ead2df3082e27b603deb4c
 function ssl_close_notify(ctx::SSLContext)
     @lockdata ctx begin
         return ccall((:mbedtls_ssl_close_notify, libmbedtls),
+                     Cint, (Ptr{Cvoid},), ctx.data)
+    end
+end
+
+"""
+Reset an already initialized SSL context for re-use while retaining
+application-set variables, function pointers and data.
+"""
+function ssl_session_reset(ctx::SSLContext)
+    @lockdata ctx begin
+        return ccall((:mbedtls_ssl_session_reset, libmbedtls),
                      Cint, (Ptr{Cvoid},), ctx.data)
     end
 end
