@@ -16,9 +16,13 @@ mutable struct SSLConfig
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-        finalizer(conf->begin
-            ccall((:mbedtls_ssl_config_free, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-            Libc.free(conf.data)
+        finalizer(x->begin
+            data = x.data
+            @async begin
+                ccall((:mbedtls_ssl_config_free, libmbedtls),
+                      Cvoid, (Ptr{Cvoid},), data)
+                Libc.free(data)
+            end
         end, conf)
         conf
     end
@@ -47,9 +51,13 @@ mutable struct SSLContext <: IO
         ctx.close_notify_sent = false
         ctx.async_exception = nothing
         ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
-        finalizer(ctx->begin
-            ccall((:mbedtls_ssl_free, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
-            Libc.free(ctx.data)
+        finalizer(x->begin
+            data = x.data
+            @async begin
+                ccall((:mbedtls_ssl_free, libmbedtls),
+                      Cvoid, (Ptr{Cvoid},), ctx.data)
+                Libc.free(ctx.data)
+            end
         end, ctx)
         ctx
     end
@@ -120,7 +128,8 @@ function ssl_abandon(ctx::SSLContext)                                           
     ctx.bytesavailable = 0
     ctx.close_notify_sent = true
     close(ctx.bio)
-    # FIXME probably should ssl_session_reset(ctx)
+    n = ssl_session_reset(ctx)
+    n == 0 || throw(MbedException(n))
 end
 
 
@@ -717,6 +726,17 @@ https://tls.mbed.org/api/ssl_8h.html#ac2c1b17128ead2df3082e27b603deb4c
 function ssl_close_notify(ctx::SSLContext)
     @lockdata ctx begin
         return ccall((:mbedtls_ssl_close_notify, libmbedtls),
+                     Cint, (Ptr{Cvoid},), ctx.data)
+    end
+end
+
+"""
+Reset an already initialized SSL context for re-use while retaining
+application-set variables, function pointers and data.
+"""
+function ssl_session_reset(ctx::SSLContext)
+    @lockdata ctx begin
+        return ccall((:mbedtls_ssl_session_reset, libmbedtls),
                      Cint, (Ptr{Cvoid},), ctx.data)
     end
 end
