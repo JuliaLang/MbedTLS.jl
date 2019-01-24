@@ -253,5 +253,8 @@ mktempdir() do d
     buf = String(read(ctx, 100))
     @test occursin(r"^HTTP/1.1 200 OK", buf)
     @test occursin(r"^CLIENT_RANDOM [0-9a-f]{64} [0-9a-f]{96}$", read(f, String))
+end
 
+let
+    include("clntsrvr/clntsrvr.jl")
 end
