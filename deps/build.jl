@@ -54,10 +54,10 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
         products = juliaproducts
     elseif !done || forcebuild
         @info "attempting source build"
-        VERSION = "2.13.0"
+        VERSION = "2.16.0"
         url, hash = haskey(ENV, "USE_GPL_MBEDTLS") ?
-            ("https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz", "a08ddf08aae55fc4f48fbc6281fcb08bc5c53ed53ffd15355ee0d75ec32b53ae") :
-            ("https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz", "593b4e4d2e1629fc407ab4750d69fa309a0ddb66565dc3deb5b60eddbdeb06da")
+            ("https://tls.mbed.org/download/mbedtls-$VERSION-gpl.tgz", "c8d7a4696287cb9533c455bdd65859106dbdd4472c125194387486e6d4df2799") :
+            ("https://tls.mbed.org/download/mbedtls-$VERSION-apache.tgz", "e3dab56e9093c790b7d5e0f7eb19451010fe680649d25cf1dcca9d5441669ae2")
         download_verify(url, hash, joinpath(@__DIR__, "mbedtls.tgz"), force=true, verbose=true)
         unpack(joinpath(@__DIR__, "mbedtls.tgz"), @__DIR__; verbose=true)
         withenv("VERSION"=>VERSION) do
