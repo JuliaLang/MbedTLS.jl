@@ -436,7 +436,7 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt;
     nread = 0
     while nread < nbytes
         nread += ssl_unsafe_read(ctx, pointer(buf) + nread, nbytes - nread)
-        if !all || eof(ctx)
+        if (nread == nbytes) || !all || eof(ctx)
             break
         end
     end                                                                         ;@😬 "readbytes! ⬅️  $nread"
