@@ -58,6 +58,7 @@ include("x509_crt.jl")
 include("ssl.jl")
 
 function __init__()
+    check_deps()
     __ctr_drbg__init__()
     __sslinit__()
     __entropyinit__()
