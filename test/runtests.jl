@@ -1,4 +1,9 @@
-using MbedTLS, Test, Random
+using MbedTLS, Test, Random, Distributed
+
+# by adding a single worker, we load the julia-shipped mbedtls binaries and thus ensure
+# the rest of the MbedTLS.jl tests run propertly even in the presence of alternative
+# versioned mbedtls libraries
+addprocs(1)
 
 import Sockets: connect
 
