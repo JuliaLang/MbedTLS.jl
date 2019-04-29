@@ -238,6 +238,32 @@ let
     @test digest1 ≠ digest3
 end
 
+# Test X509
+# This is the certificate chain of https://julialang.org
+let
+    rootpath = joinpath(@__DIR__, "..", "deps", "cacert.pem")
+    ca_crt   = MbedTLS.crt_parse_file(rootpath)
+    crtpath  = joinpath(@__DIR__, "h2.shared.global.fastly.net.crt")
+    crt      = MbedTLS.crt_parse_file(crtpath)
+    crlpath  = joinpath(@__DIR__, "root.crl")
+    crl      = MbedTLS.crl_parse_file(crlpath)
+
+    # Fails as intermediate CA is not added
+    ret, mesg = MbedTLS.crt_verify(crt, ca_crt, crl, "h2.shared.global.fastly.net")
+
+    @test ret == 0x00000008 && mesg == "The certificate is not correctly signed by the trusted CA\n"
+
+    intpath  = joinpath(@__DIR__, "GlobalSign_CloudSSL_CA_-_SHA256_-_G3.crt")
+    open(intpath) do io
+        MbedTLS.crt_parse!(ca_crt, io)
+    end
+
+    # Passes when intermediate CA is added
+    ret, mesg = MbedTLS.crt_verify(crt, ca_crt, crl, "h2.shared.global.fastly.net")
+
+    @test ret == 0x00000000 && mesg == "SUCCESS"
+end
+
 # log_secrets
 mktempdir() do d
 
