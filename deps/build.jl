@@ -71,12 +71,24 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
     end
 end
 
+libext = ""
+@static if Sys.iswindows()
+    libext = "dll"
+elseif Sys.isapple()
+    libext = "dylib"
+else
+    libext = "so"
+end
+
+libinclude = joinpath("usr", "include", "mbedtls")
+libpath    = joinpath("usr", "lib", "libhelper."*libext)
+
 stime = stat("helper.cxx").mtime
-btime = stat("usr/lib/libhelper.so").mtime
+btime = stat(libpath).mtime
 
 if stime > btime || !satisfied(helper; verbose=verbose) || forcebuild
-    println("Building helper...")
-    run(Cmd(`g++ -shared -fPIC -Iusr/include/mbedtls helper.cxx -o usr/lib/libhelper.so`, dir=@__DIR__))
+    println("Building helper... $libpath")
+    run(Cmd(`g++ -shared -fPIC -I$libinclude helper.cxx -o $libpath`, dir=@__DIR__, windows_verbatim=true))
     println("Building helper Done...")
 end
 
