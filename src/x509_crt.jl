@@ -41,6 +41,37 @@ function crt_parse(buf)
     crt
 end
 
+function sig_md(crt::CRT)
+    data = ccall((:jl_crt_get_sig_md, libhelper),
+                 Ptr{Cint}, (Ptr{Cvoid},), crt.data)
+    v = unsafe_load(data)
+    return MDKind(v)
+end
+
+function sig(crt::CRT)
+    len = Csize_t[0]
+    sdata = ccall((:jl_crt_get_sig, libhelper),
+                  Ptr{UInt8}, (Ptr{Cvoid}, Ptr{Csize_t}), crt.data, pointer(len))
+    sd  = Vector{UInt8}(undef, len[1])
+    unsafe_copyto!(pointer(sd), sdata, len[1])
+    return sd
+end
+
+function tbs(crt::CRT)
+    len = Csize_t[0]
+    sdata = ccall((:jl_crt_get_tbs, libhelper),
+                  Ptr{UInt8}, (Ptr{Cvoid}, Ptr{Csize_t}), crt.data, pointer(len))
+    sd  = Vector{UInt8}(undef, len[1])
+    unsafe_copyto!(pointer(sd), sdata, len[1])
+    return sd
+end
+
+function Base.convert(::Type{PKContext}, crt::CRT)
+    pkdata = ccall((:jl_crt_get_pk, libhelper),
+                   Ptr{Cvoid}, (Ptr{Cvoid},), crt.data)
+    return PKContext(pkdata)
+end
+
 mutable struct CRL
     data::Ptr{Cvoid}
     function CRL()
@@ -90,7 +121,7 @@ function crl_parse(buf)
     crt
 end
 
-function crt_verify(crt::CRT, trust_ca::CRT, crl::CRL, cn::String)
+function verify(crt::CRT, trust_ca::CRT, crl::CRL, cn::String)
     flags = Cuint[0]
     ret = ccall((:mbedtls_x509_crt_verify, libmbedx509),
                 Cint, (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cstring}, Ptr{Cuint}, Ptr{Nothing}, Ptr{Cvoid}),

@@ -249,7 +249,7 @@ let
     crl      = MbedTLS.crl_parse_file(crlpath)
 
     # Fails as intermediate CA is not added
-    ret, mesg = MbedTLS.crt_verify(crt, ca_crt, crl, "h2.shared.global.fastly.net")
+    ret, mesg = MbedTLS.verify(crt, ca_crt, crl, "h2.shared.global.fastly.net")
 
     @test ret == 0x00000008 && mesg == "The certificate is not correctly signed by the trusted CA\n"
 
@@ -259,9 +259,18 @@ let
     end
 
     # Passes when intermediate CA is added
-    ret, mesg = MbedTLS.crt_verify(crt, ca_crt, crl, "h2.shared.global.fastly.net")
+    ret, mesg = MbedTLS.verify(crt, ca_crt, crl, "h2.shared.global.fastly.net")
 
     @test ret == 0x00000000 && mesg == "SUCCESS"
+
+    # Verify cert signature as a PK signature verification
+
+    int_crt = MbedTLS.crt_parse_file(intpath)
+    pk      = convert(MbedTLS.PKContext, int_crt)
+    smd     = MbedTLS.sig_md(crt)
+    tbsd    = MbedTLS.tbs(crt)
+    sigd    = MbedTLS.sig(crt)
+    @test MbedTLS.verify(pk, smd, MbedTLS.digest(smd, tbsd), sigd) == 0
 end
 
 # log_secrets

@@ -17,6 +17,8 @@ juliaproducts = Product[
     LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
 ]
 
+helper = LibraryProduct(prefix, String["libhelper"], :libhelper)
+
 # Download binaries from hosted location
 bin_prefix = "https://github.com/JuliaWeb/MbedTLSBuilder/releases/download/v0.16.0"
 
@@ -69,4 +71,11 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
     end
 end
 
-write_deps_file(joinpath(@__DIR__, "deps.jl"), products, verbose=verbose)
+stime = stat("helper.cxx").mtime
+btime = stat("usr/lib/helper.so").mtime
+
+if stime > btime || !satisfied(helper; verbose=verbose) || forcebuild
+    run(Cmd(`./helper_build.sh`, dir=@__DIR__))
+end
+
+write_deps_file(joinpath(@__DIR__, "deps.jl"), push!(products, helper), verbose=verbose)

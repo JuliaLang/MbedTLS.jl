@@ -1,6 +1,11 @@
 mutable struct PKContext
     data::Ptr{Cvoid}
 
+    # To be used with caution when you are sure the context has been initialized
+    # properly like a certificate for example and the object lifecycle is managed
+    # elsewhere. Finalizer will not be called here.
+    PKContext(d::Ptr{Cvoid}) = new(d)
+
     function PKContext()
         ctx = new()
         ctx.data = Libc.malloc(32)
