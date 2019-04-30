@@ -72,10 +72,12 @@ if any(!satisfied(p; verbose=verbose) for p in products) || forcebuild
 end
 
 stime = stat("helper.cxx").mtime
-btime = stat("usr/lib/helper.so").mtime
+btime = stat("usr/lib/libhelper.so").mtime
 
 if stime > btime || !satisfied(helper; verbose=verbose) || forcebuild
-    run(Cmd(`./helper_build.sh`, dir=@__DIR__))
+    println("Building helper...")
+    run(Cmd(`g++ -shared -fPIC -Iusr/include/mbedtls helper.cxx -o usr/lib/libhelper.so`, dir=@__DIR__))
+    println("Building helper Done...")
 end
 
 write_deps_file(joinpath(@__DIR__, "deps.jl"), push!(products, helper), verbose=verbose)
