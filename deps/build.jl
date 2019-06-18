@@ -5,16 +5,16 @@ const verbose = "--verbose" in ARGS
 const prefix = Prefix(get([a for a in ARGS if a != "--verbose"], 1, joinpath(@__DIR__, "usr")))
 products = [
     LibraryProduct(prefix, String["libmbedcrypto"], :libmbedcrypto),
-    LibraryProduct(prefix, String["libmbedtls"], :libmbedtls),
     LibraryProduct(prefix, String["libmbedx509"], :libmbedx509),
+    LibraryProduct(prefix, String["libmbedtls"], :libmbedtls),
 ]
 
 const juliaprefix = joinpath(Sys.BINDIR, "..")
 
 juliaproducts = Product[
-    LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
-    LibraryProduct(juliaprefix, "libmbedcrypto", :libmbedcrypto)
+    LibraryProduct(juliaprefix, "libmbedcrypto", :libmbedcrypto),
     LibraryProduct(juliaprefix, "libmbedx509", :libmbedx509)
+    LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
 ]
 
 # Download binaries from hosted location
