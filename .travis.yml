@@ -1,19 +1,26 @@
-# Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
-env:
-    - FORCE_BUILD=true
-    - FORCE_BUILD=false
+
+sudo: false
+
 os:
   - linux
   - osx
+
 julia:
   - 1.2
   - nightly
+
+env:
+  - JULIA_PROJECT="@."
+  - FORCE_BUILD=true
+  - FORCE_BUILD=false
+
+matrix:
+  allow_failures:
+  - julia: nightly
+
 notifications:
   email: false
-script:
-    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-    - julia -e 'using Pkg; Pkg.clone(pwd()); Pkg.build("MbedTLS")'
-    - julia -e 'using Pkg; Pkg.test("MbedTLS", coverage=true)'
+
 after_success:
-    - julia -e 'cd(using Pkg; Pkg.dir("MbedTLS")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
+   - julia -e 'ENV["TRAVIS_JULIA_VERSION"] != "1.1" && ENV["TRAVIS_OS_NAME"] != "linux" && exit(); using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
