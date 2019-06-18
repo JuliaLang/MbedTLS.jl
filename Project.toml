@@ -1,5 +1,7 @@
 name = "MbedTLS"
 uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
+authors = ["Jacob Quinn <quinn.jacobd@gmail.com>"]
+version = "0.7.0"
 
 [deps]
 BinaryProvider = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
