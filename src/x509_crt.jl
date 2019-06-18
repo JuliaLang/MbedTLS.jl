@@ -20,7 +20,7 @@ function crt_info(crt::CRT)
     ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
         (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
         buf, 1000, "", crt.data)
-    unsafe_string(pointer(buf))
+    GC.@preserve buf unsafe_string(pointer(buf))
 end
 
 function crt_parse!(chain, buf::String)
