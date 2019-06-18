@@ -13,7 +13,7 @@ const juliaprefix = joinpath(Sys.BINDIR, "..")
 
 juliaproducts = Product[
     LibraryProduct(juliaprefix, "libmbedcrypto", :libmbedcrypto),
-    LibraryProduct(juliaprefix, "libmbedx509", :libmbedx509)
+    LibraryProduct(juliaprefix, "libmbedx509", :libmbedx509),
     LibraryProduct(juliaprefix, "libmbedtls", :libmbedtls)
 ]
 
