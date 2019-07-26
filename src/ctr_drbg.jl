@@ -5,9 +5,9 @@ mutable struct CtrDrbg  <: AbstractRNG
     function CtrDrbg()
         ctx = new()
         ctx.data = Libc.malloc(1000)  # 344
-        ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
+        ccall((:mbedtls_ctr_drbg_init, :libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(ctx->begin
-            ccall((:mbedtls_ctr_drbg_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
+            ccall((:mbedtls_ctr_drbg_free, :libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
             Libc.free(ctx.data)
         end, ctx)
         ctx
@@ -25,8 +25,8 @@ end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
     rng.entropy = entropy
-    entropy_func = cglobal((:mbedtls_entropy_func, libmbedcrypto))
-    @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
+    entropy_func = cglobal((:mbedtls_entropy_func, :libmbedcrypto))
+    @err_check ccall((:mbedtls_ctr_drbg_seed, :libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         rng.data, entropy_func, entropy.data, pdata, sizeof(pdata))
     rng
@@ -35,7 +35,7 @@ end
 seed!(rng::CtrDrbg, entropy) = seed!(rng, entropy, UInt8[])
 
 function Random.rand!(rng::CtrDrbg, buf::Array)
-    @err_check ccall((:mbedtls_ctr_drbg_random, libmbedcrypto), Cint,
+    @err_check ccall((:mbedtls_ctr_drbg_random, :libmbedcrypto), Cint,
             (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         rng.data, buf, sizeof(buf))
     buf

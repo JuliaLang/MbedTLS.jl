@@ -15,11 +15,11 @@ mutable struct SSLConfig
     function SSLConfig()
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
-        ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
+        ccall((:mbedtls_ssl_config_init, :libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
         finalizer(x->begin
             data = x.data
             @async begin
-                ccall((:mbedtls_ssl_config_free, libmbedtls),
+                ccall((:mbedtls_ssl_config_free, :libmbedtls),
                       Cvoid, (Ptr{Cvoid},), data)
                 Libc.free(data)
             end
@@ -50,11 +50,11 @@ mutable struct SSLContext <: IO
         ctx.bytesavailable = -1
         ctx.close_notify_sent = false
         ctx.async_exception = nothing
-        ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
+        ccall((:mbedtls_ssl_init, :libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(x->begin
             data = x.data
             @async begin
-                ccall((:mbedtls_ssl_free, libmbedtls),
+                ccall((:mbedtls_ssl_free, :libmbedtls),
                       Cvoid, (Ptr{Cvoid},), ctx.data)
                 Libc.free(ctx.data)
             end
@@ -463,19 +463,19 @@ end
 
 function config_defaults!(config::SSLConfig; endpoint=MBEDTLS_SSL_IS_CLIENT,
     transport=MBEDTLS_SSL_TRANSPORT_STREAM, preset=MBEDTLS_SSL_PRESET_DEFAULT)
-    @err_check ccall((:mbedtls_ssl_config_defaults, libmbedtls), Cint,
+    @err_check ccall((:mbedtls_ssl_config_defaults, :libmbedtls), Cint,
         (Ptr{Cvoid}, Cint, Cint, Cint),
         config.data, endpoint, transport, preset)
 end
 
 function authmode!(config::SSLConfig, auth)
-    ccall((:mbedtls_ssl_conf_authmode, libmbedtls), Cvoid,
+    ccall((:mbedtls_ssl_conf_authmode, :libmbedtls), Cvoid,
         (Ptr{Cvoid}, Cint),
         config.data, auth)
 end
 
 function rng!(config::SSLConfig, f_rng::Ptr{Cvoid}, rng)
-    ccall((:mbedtls_ssl_conf_rng, libmbedtls), Cvoid,
+    ccall((:mbedtls_ssl_conf_rng, :libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Any),
         config.data, f_rng, rng)
 end
@@ -487,7 +487,7 @@ end
 
 function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem")))
     config.chain = chain
-    ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
+    ccall((:mbedtls_ssl_conf_ca_chain, :libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         config.data, chain.data, C_NULL)
 end
@@ -498,7 +498,7 @@ Enable / Disable renegotiation support for connection when initiated by peer
 See: https://tls.mbed.org/api/ssl_8h.html#aad4f50fc1c0a018fd5eb18fd9621d0d3
 """
 function ssl_conf_renegotiation!(config::SSLConfig, renegotiation)
-    ccall((:mbedtls_ssl_conf_renegotiation, libmbedtls), Cvoid,
+    ccall((:mbedtls_ssl_conf_renegotiation, :libmbedtls), Cvoid,
         (Ptr{Cvoid}, Cint),
         config.data, renegotiation)
 end
@@ -506,7 +506,7 @@ end
 function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
     config.cert = cert
     config.key = key
-    @err_check ccall((:mbedtls_ssl_conf_own_cert, libmbedtls), Cint,
+    @err_check ccall((:mbedtls_ssl_conf_own_cert, :libmbedtls), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         config.data, cert.data, key.data)
 end
@@ -517,7 +517,7 @@ function setup!(ctx::SSLContext, conf::SSLConfig)
 end
 
 function dbg!(conf::SSLConfig, f::Ptr{Cvoid}, p)
-    ccall((:mbedtls_ssl_conf_dbg, libmbedtls), Cvoid,
+    ccall((:mbedtls_ssl_conf_dbg, :libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Any),
         conf.data, f, p)
 end
@@ -541,20 +541,20 @@ end
     VERBOSE)
 
 function set_dbg_level(level)
-    ccall((:mbedtls_debug_set_threshold, libmbedtls), Cvoid,
+    ccall((:mbedtls_debug_set_threshold, :libmbedtls), Cvoid,
         (Cint,), Cint(level))
     nothing
 end
 
 function set_alpn!(conf::SSLConfig, protos)
     conf.alpn_protos = protos
-    @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, libmbedtls), Cint,
+    @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, :libmbedtls), Cint,
                      (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, protos)
     nothing
 end
 
 function alpn_proto(ctx::SSLContext)
-    rv = ccall((:mbedtls_ssl_get_alpn_protocol, libmbedtls), Ptr{Cchar},
+    rv = ccall((:mbedtls_ssl_get_alpn_protocol, :libmbedtls), Ptr{Cchar},
                (Ptr{Cvoid},), ctx.data)
     unsafe_string(rv)
 end
@@ -575,13 +575,13 @@ macro lockdata(ctx, expr)
 end
 
 function get_peer_cert(ctx::SSLContext)
-    data = ccall((:mbedtls_ssl_get_peer_cert, libmbedtls), Ptr{Cvoid}, (Ptr{Cvoid},), ctx.data)
+    data = ccall((:mbedtls_ssl_get_peer_cert, :libmbedtls), Ptr{Cvoid}, (Ptr{Cvoid},), ctx.data)
     return CRT(data)
 end
 
 function get_version(ctx::SSLContext)
     if isdefined(ctx, :config)
-        data = ccall((:mbedtls_ssl_get_version, libmbedtls), Ptr{UInt8}, (Ptr{Cvoid},), ctx.data)
+        data = ccall((:mbedtls_ssl_get_version, :libmbedtls), Ptr{UInt8}, (Ptr{Cvoid},), ctx.data)
         return unsafe_string(data)
     else
         throw(ArgumentError("`ctx` hasn't been initialized with an MbedTLS.SSLConfig; run `MbedTLS.setup!(ctx, conf)`"))
@@ -589,13 +589,13 @@ function get_version(ctx::SSLContext)
 end
 
 function get_ciphersuite(ctx::SSLContext)
-    data = ccall((:mbedtls_ssl_get_ciphersuite, libmbedtls), Ptr{UInt8}, (Ptr{Cvoid},), ctx.data)
+    data = ccall((:mbedtls_ssl_get_ciphersuite, :libmbedtls), Ptr{UInt8}, (Ptr{Cvoid},), ctx.data)
     return unsafe_string(data)
 end
 
 function ssl_setup(ctx::SSLContext, conf::SSLConfig)
     @lockdata ctx begin
-        @err_check ccall((:mbedtls_ssl_setup, libmbedtls), Cint,
+        @err_check ccall((:mbedtls_ssl_setup, :libmbedtls), Cint,
             (Ptr{Cvoid}, Ptr{Cvoid}),
             ctx.data, conf.data)
     end
@@ -603,7 +603,7 @@ end
 
 function ssl_handshake(ctx::SSLContext)
     n = @lockdata ctx begin
-        ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
+        ccall((:mbedtls_ssl_handshake, :libmbedtls), Cint,
               (Ptr{Cvoid},), ctx.data)
     end
 end
@@ -616,7 +616,7 @@ https://tls.mbed.org/api/ssl_8h.html#ad43142085f3182e9b0dc967ec582032b:
 """
 function ssl_get_bytes_avail(ctx::SSLContext)::Int
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_get_bytes_avail, libmbedtls),
+        return ccall((:mbedtls_ssl_get_bytes_avail, :libmbedtls),
                      Csize_t, (Ptr{Cvoid},), ctx.data)
     end
 end
@@ -641,14 +641,14 @@ https://tls.mbed.org/api/ssl_8h.html#a4075f7de9877fd667bcfa2e819e33426
 """
 function ssl_check_pending(ctx::SSLContext)::Bool
     @lockdata ctx begin
-	return ccall((:mbedtls_ssl_check_pending, libmbedtls),
+	return ccall((:mbedtls_ssl_check_pending, :libmbedtls),
 		     Cint, (Ptr{Cvoid},), ctx.data) > 0
     end
 end
 
 function ssl_set_bio(ctx::SSLContext, bio, f_send::Ptr{Cvoid}, f_recv::Ptr{Cvoid})
     @lockdata ctx begin
-        ccall((:mbedtls_ssl_set_bio, libmbedtls), Cvoid,
+        ccall((:mbedtls_ssl_set_bio, :libmbedtls), Cvoid,
             (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
             ctx.data, bio, f_send, f_recv, C_NULL)
     end
@@ -678,7 +678,7 @@ https://tls.mbed.org/api/ssl_8h.html#aa2c29eeb1deaf5ad9f01a7515006ede5
 """
 function ssl_read(ctx::SSLContext, ptr, n)::Int
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_read, libmbedtls), Cint,
+        return ccall((:mbedtls_ssl_read, :libmbedtls), Cint,
                      (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
                      ctx.data, ptr, n)
     end
@@ -703,7 +703,7 @@ https://tls.mbed.org/api/ssl_8h.html#a5bbda87d484de82df730758b475f32e5
 """
 function ssl_write(ctx::SSLContext, ptr, n)::Int
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_write, libmbedtls), Cint,
+        return ccall((:mbedtls_ssl_write, :libmbedtls), Cint,
                      (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
                      ctx.data, ptr, n)
     end
@@ -725,7 +725,7 @@ https://tls.mbed.org/api/ssl_8h.html#ac2c1b17128ead2df3082e27b603deb4c
 """
 function ssl_close_notify(ctx::SSLContext)
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_close_notify, libmbedtls),
+        return ccall((:mbedtls_ssl_close_notify, :libmbedtls),
                      Cint, (Ptr{Cvoid},), ctx.data)
     end
 end
@@ -736,13 +736,13 @@ application-set variables, function pointers and data.
 """
 function ssl_session_reset(ctx::SSLContext)
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_session_reset, libmbedtls),
+        return ccall((:mbedtls_ssl_session_reset, :libmbedtls),
                      Cint, (Ptr{Cvoid},), ctx.data)
     end
 end
 
 function hostname!(ctx::SSLContext, hostname)
-    @err_check ccall((:mbedtls_ssl_set_hostname, libmbedtls), Cint,
+    @err_check ccall((:mbedtls_ssl_set_hostname, :libmbedtls), Cint,
       (Ptr{Cvoid}, Cstring), ctx.data, hostname)
 end
 
