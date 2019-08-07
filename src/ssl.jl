@@ -485,7 +485,7 @@ function rng!(config::SSLConfig, rng::AbstractRNG)
     rng!(config, c_rng[], rng)
 end
 
-function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem")))
+function ca_chain!(config::SSLConfig, chain=crt_parse_file("cacert.pem"))
     config.chain = chain
     ccall((:mbedtls_ssl_conf_ca_chain, :libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
