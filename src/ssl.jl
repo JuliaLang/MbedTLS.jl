@@ -485,7 +485,7 @@ function rng!(config::SSLConfig, rng::AbstractRNG)
     rng!(config, c_rng[], rng)
 end
 
-function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(@__DIR__, "cacert.pem")))
+function ca_chain!(config::SSLConfig, chain=crt_parse_file(CERT[]))
     config.chain = chain
     ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
@@ -749,8 +749,11 @@ end
 const c_send = Ref{Ptr{Cvoid}}(C_NULL)
 const c_recv = Ref{Ptr{Cvoid}}(C_NULL)
 const c_dbg = Ref{Ptr{Cvoid}}(C_NULL)
+const CERT = Ref{String}("")
+
 function __sslinit__()
     c_send[] = @cfunction(f_send, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
     c_recv[] = @cfunction(f_recv, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
     c_dbg[] = @cfunction(f_dbg, Cvoid, (Any, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
+    CERT[] = abspath(ccall(:jl_get_julia_bindir, Any, ()), Base.DATAROOTDIR, "julia", "cert.pem")
 end
