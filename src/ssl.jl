@@ -383,7 +383,7 @@ function f_recv(c_bio, buf, nbytes)
     bio = unsafe_pointer_to_objref(c_bio)
     n = bytesavailable(bio)
     if n == 0                                                                   ;@🤖 "f_recv $(isopen(bio) ? "WANT_READ" : "CONN_RESET")"
-        return isopen(bio) ? Cint(MBEDTLS_ERR_SSL_WANT_READ) : 
+        return isopen(bio) ? Cint(MBEDTLS_ERR_SSL_WANT_READ) :
                              Cint(MBEDTLS_ERR_NET_CONN_RESET)
     end
     n = min(nbytes, n)                                                          ;@🤖 "f_recv ⬅️  $n"
@@ -394,7 +394,7 @@ end
 
 # Base ::IO Write Methods -- wrappers for `ssl_unsafe_write`
 
-Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt) = 
+Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt) =
     ssl_unsafe_write(ctx, msg, N)
 
 
@@ -407,7 +407,7 @@ Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 Copy `nbytes` of decrypted data from `ctx` into `buf`.
 Wait for sufficient decrypted data to be available.
 Throw `EOFError` if the peer sends TLS `close_notify` or closes the
-connection before `nbytes` have been copied. 
+connection before `nbytes` have been copied.
 """
 function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
     nread = 0
@@ -490,6 +490,186 @@ function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__F
     ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         config.data, chain.data, C_NULL)
+end
+
+# follows steps described here:
+# https://tls.mbed.org/discussions/crypto-and-ssl/client-ca-load-where-can-i-get-the-right-crt-if-i-access-a-web-site
+const _crypt32 = "Crypt32.dll"
+HANDLE = Ptr{Cvoid}
+HCRYPTPROV = HANDLE
+HCRYPTPROV_LEGACY = HCRYPTPROV
+HCERTSTORE = HANDLE
+LPWSTR = Cwstring #Ptr{Cushort} # Cwstring, Ptr{UInt16}
+LPCWSTR = Cwstring #Ptr{Cushort} # Cwstring, Ptr{UInt16}
+LPSTR = Cstring #Ptr{UInt8} # Cstring?
+BOOL = Cint
+BYTE = Cuchar #Cint #UInt8 # Cint
+DWORD = Culong
+# https://docs.microsoft.com/en-us/windows/win32/com/com-error-codes-4
+const CRYPT_E_NOT_FOUND = 0x80092004
+const X509_ASN_ENCODING = 0x00000001
+const CERT_NAME_FRIENDLY_DISPLAY_TYPE = 5
+const CERT_NAME_SIMPLE_DISPLAY_TYPE = 4
+const CERT_NAME_ISSUER_FLAG = 0x1
+
+
+struct CRYPT_INTEGER_BLOB
+    cbData::DWORD     # DWORD cbData
+    pbData::Ptr{BYTE} # BYTE  *pbData
+end
+CRYPT_OBJID_BLOB = CRYPT_INTEGER_BLOB
+CERT_NAME_BLOB = CRYPT_INTEGER_BLOB
+
+struct CRYPT_ALGORITHM_IDENTIFIER
+    pszObjId::LPSTR              # LPSTR            pszObjId
+    Parameters::CRYPT_OBJID_BLOB # CRYPT_OBJID_BLOB Parameters
+end
+
+struct FILETIME
+  dwLowDateTime::DWORD  # DWORD dwLowDateTime
+  dwHighDateTime::DWORD # DWORD dwHighDateTime
+end
+
+struct CRYPT_BIT_BLOB
+  cbData::DWORD      # DWORD cbData
+  pbData::Ptr{BYTE}  # BYTE  *pbData
+  cUnusedBits::DWORD # DWORD cUnusedBits
+end
+
+struct CERT_PUBLIC_KEY_INFO
+    Algorithm::CRYPT_ALGORITHM_IDENTIFIER # CRYPT_ALGORITHM_IDENTIFIER Algorithm
+    PublicKey::CRYPT_BIT_BLOB             # CRYPT_BIT_BLOB             PublicKey
+end
+
+struct CERT_EXTENSION
+  pszObjId::LPSTR         # LPSTR            pszObjId
+  fCritical::BOOL         # BOOL             fCritical
+  Value::CRYPT_OBJID_BLOB # CRYPT_OBJID_BLOB Value
+end
+
+struct CERT_INFO
+    dwVersion::DWORD                               # DWORD                      dwVersion
+    SerialNumber::CRYPT_INTEGER_BLOB               # CRYPT_INTEGER_BLOB         SerialNumber
+    SignatureAlgorithm::CRYPT_ALGORITHM_IDENTIFIER # CRYPT_ALGORITHM_IDENTIFIER SignatureAlgorithm
+    Issuer::CERT_NAME_BLOB                         # CERT_NAME_BLOB             Issuer
+    NotBefore::FILETIME                            # FILETIME                   NotBefore
+    NotAfter::FILETIME                             # FILETIME                   NotAfter
+    Subject::CERT_NAME_BLOB                        # CERT_NAME_BLOB             Subject
+    SubjectPublicKeyInfo::CERT_PUBLIC_KEY_INFO     # CERT_PUBLIC_KEY_INFO       SubjectPublicKeyInfo
+    IssuerUniqueId::CRYPT_BIT_BLOB                 # CRYPT_BIT_BLOB             IssuerUniqueId
+    SubjectUniqueId::CRYPT_BIT_BLOB                # CRYPT_BIT_BLOB             SubjectUniqueId
+    cExtension::DWORD                              # DWORD                      cExtension
+    rgExtension::Ptr{CERT_EXTENSION}               # PCERT_EXTENSION            rgExtension
+end
+PCERT_INFO = Ptr{CERT_INFO}
+
+struct CERT_CONTEXT
+    dwCertEncodingType::DWORD #   DWORD      dwCertEncodingType; # e.g. X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+    pbCertEncoded::Ptr{BYTE}  #   BYTE       *pbCertEncoded;     # A pointer to a buffer that contains the encoded certificate.
+    cbCertEncoded::DWORD      #   DWORD      cbCertEncoded;      # The size, in bytes, of the encoded certificate.
+    pCertInfo::PCERT_INFO     # PCERT_INFO pCertInfo
+    hCertStore::HCERTSTORE    # HCERTSTORE hCertStore
+end
+PCCERT_CONTEXT = Ptr{CERT_CONTEXT}
+
+"""
+
+    ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false)
+
+Populate the certificate authority chain with root certificates from the systems root certificate `stores`.
+
+Currently only implemented on Windows.  If `debug_output` is enabled, look at stdout and compare to the certificates found in `certmgr.msc`.
+
+# Example
+```
+conf = MbedTLS.SSLConfig()
+MbedTLS.ca_chain_with_root_store!(conf; debug_output=true)
+```
+"""
+function ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false) end
+
+if Sys.iswindows()
+    function ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false)
+        # chain = crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem"))
+        config.chain = CRT()
+
+        # 1. Initialize an mbedTLS certificate using mbedtls_x509_crt_init(my_ca_chain).
+        ## default CRT object stored in chain is initialized with mbedtls_x509_crt_init already
+
+        # 2. Call CertOpenSystemStore, passing ROOT as the system store name.
+        ## https://docs.microsoft.com/en-us/windows/win32/api/wincrypt/nf-wincrypt-certopensystemstorew
+
+        for store in stores
+            if debug_output
+                @show store
+            end
+            hcertstore = ccall((:CertOpenSystemStoreW, _crypt32), HCERTSTORE, (HCRYPTPROV_LEGACY, LPCWSTR),
+                C_NULL, store)
+
+            hcertstore == C_NULL && error("CertOpenSystemStore failed: \"$(Libc.FormatMessage())\"")
+
+            # 3. Repeatedly call CertEnumCertificatesInStore until CRYPT_E_NOT_FOUND.
+            pccert_context = ccall((:CertEnumCertificatesInStore, _crypt32), PCCERT_CONTEXT, (HCERTSTORE, PCCERT_CONTEXT),
+                hcertstore, C_NULL)
+
+            pccert_context == C_NULL && error("CertEnumCertificatesInStore returned null on init: \"$(Libc.FormatMessage())\"")
+            count = 0
+            last_error = 0
+            while last_error != CRYPT_E_NOT_FOUND && pccert_context != C_NULL
+                # println("Cert Count = $(count)")
+                # 4. For each cert in the store, I check that it has X509_ASN_ENCODING.
+                store_cert = unsafe_load(pccert_context)
+                store_cert_info = unsafe_load(store_cert.pCertInfo)
+                issuer = unsafe_string(store_cert_info.Issuer.pbData, store_cert_info.Issuer.cbData)
+                subject = unsafe_string(store_cert_info.Subject.pbData, store_cert_info.Subject.cbData)
+                if (store_cert.dwCertEncodingType & X509_ASN_ENCODING) != 0
+
+                    if debug_output
+                        buf_size = 1024
+                        buffer = Vector{UInt8}(undef, buf_size)
+                        # name = ccall((:CertGetNameStringW, _crypt32), DWORD,
+                        #     (PCCERT_CONTEXT, DWORD, DWORD, Cvoid, LPSTR, DWORD),
+                        #     pccert_context, CERT_NAME_FRIENDLY_DISPLAY_TYPE, CERT_NAME_ISSUER_FLAG)
+                        retval = ccall((:CertNameToStrA, _crypt32), DWORD,
+                            (DWORD, CERT_NAME_BLOB, DWORD, Ptr{UInt8}, DWORD),
+                            X509_ASN_ENCODING, store_cert_info.Issuer, 2, buffer, buf_size)
+                        issuer = String(buffer[1:retval - 1])
+                        println(issuer)
+                    end
+
+                    # 5. If so I call mbedtls_x509_crt_parse(my_ca_chain, store_cert->pbCertEncoded, store_cert->cbCertEncoded)
+                    # to load the certificate from the store into my certificate chain.
+                    ## similar to crt_parse!(chain, buf::String), but the data isn't in a String
+                    ret = ccall((:mbedtls_x509_crt_parse, libmbedx509), Cint,
+                        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+                        config.chain.data, store_cert.pbCertEncoded, store_cert.cbCertEncoded)
+                    #ret == 0 || mbed_err(ret)
+                end
+
+                pccert_context = ccall((:CertEnumCertificatesInStore, _crypt32), PCCERT_CONTEXT, (HCERTSTORE, PCCERT_CONTEXT),
+                    hcertstore, pccert_context)
+
+                last_error = Libc.GetLastError()
+                count += 1
+            end
+            if debug_output
+                @show count
+            end
+
+            @assert last_error == CRYPT_E_NOT_FOUND
+
+            # Cleanup handle to CertStore
+            retval = ccall((:CertCloseStore, _crypt32), BOOL, (HCERTSTORE, DWORD),
+                hcertstore, 0)
+
+            retval == 0 && error("CertCloseStore failed: \"$(Libc.FormatMessage())\"")
+        end
+
+        # I then use my_ca_chain with mbedtls_ssl_conf_ca_chain(...) when setting up the ssl config.
+        ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+            config.data, config.chain.data, C_NULL)
+    end
 end
 
 """
