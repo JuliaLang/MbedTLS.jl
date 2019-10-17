@@ -114,7 +114,7 @@ function SSLConfig(cert_file, key_file)
     return conf
 end
 
-function SSLConfig(verify::Bool; log_secrets=nothing)
+function SSLConfig(verify::Bool; log_secrets=nothing, use_system_stores=true)
     conf = MbedTLS.SSLConfig()
     MbedTLS.config_defaults!(conf)
 
@@ -132,7 +132,11 @@ function SSLConfig(verify::Bool; log_secrets=nothing)
     else
         MbedTLS.dbg!(conf, tls_dbg)
     end
-    MbedTLS.ca_chain!(conf)
+    if use_system_stores && Sys.iswindows()
+        MbedTLS.ca_chain_with_root_store!(conf)
+    else
+        MbedTLS.ca_chain!(conf)
+    end
     conf
 end
 
