@@ -1,6 +1,5 @@
 include("debug.jl")
 
-
 # Data Structures
 
 mutable struct SSLConfig
@@ -495,16 +494,19 @@ end
 # follows steps described here:
 # https://tls.mbed.org/discussions/crypto-and-ssl/client-ca-load-where-can-i-get-the-right-crt-if-i-access-a-web-site
 const _crypt32 = "Crypt32.dll"
+const _ole32 = "Ole32.dll"
 HANDLE = Ptr{Cvoid}
 HCRYPTPROV = HANDLE
 HCRYPTPROV_LEGACY = HCRYPTPROV
 HCERTSTORE = HANDLE
 LPWSTR = Cwstring #Ptr{Cushort} # Cwstring, Ptr{UInt16}
 LPCWSTR = Cwstring #Ptr{Cushort} # Cwstring, Ptr{UInt16}
+LPCOLESTR = Cwstring
 LPSTR = Cstring #Ptr{UInt8} # Cstring?
 BOOL = Cint
 BYTE = Cuchar #Cint #UInt8 # Cint
 DWORD = Culong
+
 # https://docs.microsoft.com/en-us/windows/win32/com/com-error-codes-4
 const CRYPT_E_NOT_FOUND = 0x80092004
 const X509_ASN_ENCODING = 0x00000001
@@ -512,6 +514,8 @@ const CERT_NAME_FRIENDLY_DISPLAY_TYPE = 5
 const CERT_NAME_SIMPLE_DISPLAY_TYPE = 4
 const CERT_NAME_ISSUER_FLAG = 0x1
 
+const COINIT_APARTMENTTHREADED = 0x2
+const CLSCTX_INPROC_SERVER = 0x1
 
 struct CRYPT_INTEGER_BLOB
     cbData::DWORD     # DWORD cbData
@@ -571,6 +575,186 @@ struct CERT_CONTEXT
     hCertStore::HCERTSTORE    # HCERTSTORE hCertStore
 end
 PCCERT_CONTEXT = Ptr{CERT_CONTEXT}
+
+struct _GUID
+    Data::UInt128
+    # unsigned long Data1;
+    # unsigned short Data2;
+    # unsigned short Data3;
+    # Data4:: # unsigned char Data4[8];
+end
+
+LPCLSID = Ptr{UInt128} # Ptr{_GUID}
+BSTR = Cwstring # technically a pointer to the first character of the string
+HRESULT = Int32
+LPVOID = Ptr{Cvoid}
+REFCLSID = Array{UInt8,1} # UInt128 # _GUID
+LPUNKNOWN = HANDLE
+REFIID = Array{UInt8,1} # UInt128 # _GUID
+
+function load_system_crl!(config::SSLConfig) end
+
+if Sys.iswindows()
+    # Access COM Objects without registering
+    function MyCoCreateInstance(dllname, rclsid::REFCLSID, pUnkOuter::LPUNKNOWN, riid::REFIID, ppv) #::Ptr{LPVOID})
+        hr = 0x80040152; #REGDB_E_KEYMISSING;
+
+        # HMODULE hDll = ::LoadLibrary(szDllName);
+        # if (hDll == 0)
+        #   return hr;
+
+        # typedef HRESULT (__stdcall *pDllGetClassObject)(IN REFCLSID rclsid,
+        #                  IN REFIID riid, OUT LPVOID FAR* ppv);
+        #
+        # pDllGetClassObject GetClassObject =
+        #    (pDllGetClassObject)::GetProcAddress(hDll, "DllGetClassObject");
+        # if (GetClassObject == 0)
+        # {
+        #   ::FreeLibrary(hDll);
+        #   return hr;
+        # }
+
+        IID_IClassFactory =  Vector{UInt8}(undef, 16) # convert(UInt128, 0)
+
+        # FIXME: didn't like non-const dllname, hardcoding to _ole32
+        hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
+            "{00000001-0000-0000-C000-000000000046}", pointer(IID_IClassFactory)) # Unknwn.h
+        @show IID_IClassFactory
+
+        # IClassFactory *pIFactory;
+        pIFactory = Ref(Ptr{Cvoid}(0))
+
+        # hr = GetClassObject(rclsid, IID_IClassFactory, (LPVOID *)&pIFactory);
+        ccall((:DllGetClassObject, _ole32), HRESULT, (REFCLSID, REFIID, Ptr{LPVOID}),
+            rclsid, IID_IClassFactory, pIFactory)
+        println("$(@__LINE__)")
+        @show pIFactory[]
+        println("$(@__LINE__)")
+        hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(UInt32(hr), base=16))")
+        println("$(@__LINE__)")
+        # 5 functions:
+        # QueryInterface, AddRef, Release, CreateInstance, LockServer
+        IFactory = unsafe_wrap(Vector{Ptr{Cvoid}}, pIFactory[], (5, ) )
+        println("$(@__LINE__)")
+
+        ppv = Ref(Ptr{Cvoid}(0))
+        println("$(@__LINE__)")
+        # hr = pIFactory->CreateInstance(pUnkOuter, riid, ppv);
+        hr = ccall(IFactory[4], HRESULT, (LPUNKNOWN, REFIID, LPVOID), pUnkOuter, riid, ppv)
+        println("$(@__LINE__)")
+        hr < 0 && error("Failed IFactory::CreateInstance ppv: HRESULT 0x$(string(UInt32(hr), base=16))")
+        println("$(@__LINE__)")
+
+        # pIFactory->Release();
+        hr = ccall(IFactory[3], HRESULT, ())
+        println("$(@__LINE__)")
+        hr < 0 && error("Failed IFactory::Release, HRESULT 0x$(string(UInt32(hr), base=16))")
+        println("$(@__LINE__)")
+
+        return (hr, ppv);
+    end
+
+    # https://docs.microsoft.com/en-us/windows/win32/api/certadm/nf-certadm-icertadmin-getcrl
+    function load_system_crl!(config::SSLConfig)
+        # ICertAdmin * pCertAdmin = NULL;  // pointer to interface object
+        # BSTR bstrCA = NULL;              // variable for machine\CAName
+        # BSTR bstrCRL = NULL;             // variable to contain
+        #                                  // the retrieved CRL
+        #
+        # HRESULT hr;
+        #
+        # //  Initialize COM.
+        # hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        hr = ccall((:CoInitializeEx, _ole32), HRESULT, (LPVOID, DWORD),
+                    C_NULL, COINIT_APARTMENTTHREADED)
+        hr < 0 && error("Failed CoInitializeEx: HRESULT 0x$(string(UInt32(hr), base=16))")
+        # if (FAILED(hr))
+        # {
+        #     printf("Failed CoInitializeEx [%x]\n", hr);
+        #     goto error;
+        # }
+        #
+        # //  Create the CertAdmin object
+        # //  and get a pointer to its ICertAdmin interface.
+        # hr = CoCreateInstance( CLSID_CCertAdmin,
+        #                        NULL,
+        #                        CLSCTX_INPROC_SERVER,
+        #                        IID_ICertAdmin,
+        #                        (void **)&pCertAdmin);
+        # CLSID_CCertAdmin = UUID("37eabaf0-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
+        CLSID_CCertAdmin =  Vector{UInt8}(undef, 16) # convert(UInt128, 0)
+
+        hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
+            "{37eabaf0-7fb6-11d0-8817-00a0c903b83c}", pointer(CLSID_CCertAdmin))
+        @show CLSID_CCertAdmin
+        # IID_ICertAdmin = UUID("34df6950-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
+        # @show string(IID_ICertAdmin, base=16)
+
+        IID_ICertAdmin =  Vector{UInt8}(undef, 16)
+        hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
+            "{34df6950-7fb6-11d0-8817-00a0c903b83c}", pointer(IID_ICertAdmin))
+        @show IID_ICertAdmin
+
+        pCertAdmin = Ref(Ptr{Cvoid}(0)) #Vector{UInt8}(undef, 16)
+
+        if false
+            hr = ccall((:CoCreateInstance, _ole32), HRESULT,
+                        (REFCLSID,        LPUNKNOWN, DWORD,                REFIID,         LPVOID),
+                        CLSID_CCertAdmin, C_NULL,    CLSCTX_INPROC_SERVER, IID_ICertAdmin, pCertAdmin ) # TODO: make sure pCertAdmin is populating
+        else
+            hr = MyCoCreateInstance(_ole32, CLSID_CCertAdmin, C_NULL, IID_ICertAdmin, pCertAdmin)
+        end
+        @show pCertAdmin
+        hr < 0 && error("Failed CoCreateInstance pCertAdmin: HRESULT 0x$(string(UInt32(hr), base=16))")
+
+        # access the 10 functions insided of the COM interface
+        certAdm = unsafe_wrap(Vector{Ptr{Cvoid}}, pCertAdmin[], (10, ) )
+
+        # if (FAILED(hr))
+        # {
+        #     printf("Failed CoCreateInstance pCertAdmin [%x]\n", hr);
+        #     goto error;
+        # }
+        #
+        # //  Note the use of two backslashes (\\)
+        # //  in C++ to produce one backslash (\).
+        # bstrCA = SysAllocString(L"<COMPUTERNAMEHERE>\\<CANAMEHERE>");
+        # if (FAILED(hr))
+        # {
+        #     printf("Failed to allocate memory for bstrCA\n");
+        #     goto error;
+        # }
+        #
+        # //  Retrieve the CRL.
+        # hr = pCertAdmin->GetCRL( bstrCA, CR_OUT_BINARY, &bstrCRL );
+        # if (FAILED(hr))
+        # {
+        #     printf("Failed GetCRL [%x]\n", hr);
+        #     goto error;
+        # }
+        # else
+        #     printf("CRL retrieved successfully\n");
+        #     //  Use the CRL as needed.
+        #
+        # //  Done processing.
+        #
+        # error:
+        #
+        # //  Free BSTR values.
+        # if (NULL != bstrCA)
+        #     SysFreeString(bstrCA);
+        #
+        # if (NULL != bstrCRL)
+        #     SysFreeString(bstrCRL);
+        #
+        # //  Clean up object resources.
+        # if (NULL != pCertAdmin)
+        #     pCertAdmin->Release();
+        #
+        # //  Free COM resources.
+        # CoUninitialize();
+    end
+end
 
 """
 
