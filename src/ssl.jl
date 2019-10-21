@@ -630,7 +630,7 @@ if Sys.iswindows()
         @show IID_IClassFactory
 
         # IClassFactory *pIFactory;
-        global pIFactory = Vector{UInt8}(undef, 8)
+        global pIFactory = Vector{Ptr{Ptr{Ptr{Cvoid}}}}(undef, 1)
         @show pIFactory
 
         # hr = GetClassObject(rclsid, IID_IClassFactory, (LPVOID *)&pIFactory);
@@ -640,7 +640,7 @@ if Sys.iswindows()
         @show pIFactory
         @show hr
         println("$(@__LINE__)")
-        hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(UInt64(hr), base=16))")
+        hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
         println("$(@__LINE__)")
         # 5 functions:
         # QueryInterface, AddRef, Release, CreateInstance, LockServer
@@ -652,15 +652,25 @@ if Sys.iswindows()
         ppv = Ref(Ptr{Cvoid}(0))
         println("$(@__LINE__)")
         # hr = pIFactory->CreateInstance(pUnkOuter, riid, ppv);
-        hr = ccall(IFactory[4], HRESULT, (LPUNKNOWN, REFIID, LPVOID), pUnkOuter, riid, ppv)
+        # unsafe_load(Ptr{UInt64}(unsafe_load(reinterpret(Ptr{UInt64}, MbedTLS.pIFactory[]), 1)), 1)
+
+
+        # The interface is stored in Unknwn.h as a pointer to a Vtbl object, so there are multiple layers
+        # to unwrap to get to the function calls.
+        # See lines 455 to 492 in C:\Program Files (x86)\Windows Kits\10\Include\10.0.18362.0\um\Unknwn.h
+        # The fourth element in the Interface is CreateInstance
+        IFactory_this = unsafe_load(MbedTLS.pIFactory[])
+        CreateInstance = unsafe_load(IFactory_this, 4)
         println("$(@__LINE__)")
-        hr < 0 && error("Failed IFactory::CreateInstance ppv: HRESULT 0x$(string(UInt32(hr), base=16))")
+        hr = ccall(CreateInstance, HRESULT, (LPVOID, LPUNKNOWN, REFIID, LPVOID), IFactory_this, pUnkOuter, riid, ppv)
+        println("$(@__LINE__)")
+        hr < 0 && error("Failed IFactory::CreateInstance ppv: HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
         println("$(@__LINE__)")
 
         # pIFactory->Release();
         hr = ccall(IFactory[3], HRESULT, ())
         println("$(@__LINE__)")
-        hr < 0 && error("Failed IFactory::Release, HRESULT 0x$(string(UInt32(hr), base=16))")
+        hr < 0 && error("Failed IFactory::Release, HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
         println("$(@__LINE__)")
 
         return (hr, ppv);
@@ -679,7 +689,7 @@ if Sys.iswindows()
         # hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
         hr = ccall((:CoInitializeEx, _ole32), HRESULT, (LPVOID, DWORD),
                     C_NULL, COINIT_APARTMENTTHREADED)
-        hr < 0 && error("Failed CoInitializeEx: HRESULT 0x$(string(UInt32(hr), base=16))")
+        hr < 0 && error("Failed CoInitializeEx: HRESULT 0x$(string(reinterpret(UInt64, hr),base=16))")
         # if (FAILED(hr))
         # {
         #     printf("Failed CoInitializeEx [%x]\n", hr);
