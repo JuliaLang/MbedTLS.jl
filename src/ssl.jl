@@ -584,13 +584,21 @@ struct _GUID
     # Data4:: # unsigned char Data4[8];
 end
 
-LPCLSID = Ptr{UInt128} # Ptr{_GUID}
+LPCLSID =  Ptr{UInt128} # Ptr{_GUID}
 BSTR = Cwstring # technically a pointer to the first character of the string
 HRESULT = Int32
 LPVOID = Ptr{Cvoid}
-REFCLSID = Array{UInt8,1} # UInt128 # _GUID
+REFCLSID = Ptr{UInt128} #Array{UInt8,1} #  Ptr{UInt128}????   # UInt128 # _GUID
 LPUNKNOWN = HANDLE
-REFIID = Array{UInt8,1} # UInt128 # _GUID
+REFIID = Ptr{UInt128} #Array{UInt8,1} # UInt128 # _GUID
+
+mutable struct IClassFactory
+    QueryInterface::Ptr
+    AddRef::Ptr
+    Release::Ptr
+    CreateInstance::Ptr
+    LockServer::Ptr
+end
 
 function load_system_crl!(config::SSLConfig) end
 
@@ -614,7 +622,7 @@ if Sys.iswindows()
         #   return hr;
         # }
 
-        IID_IClassFactory =  Vector{UInt8}(undef, 16) # convert(UInt128, 0)
+        IID_IClassFactory =  Vector{UInt128}(undef, 1) # convert(UInt128, 0)
 
         # FIXME: didn't like non-const dllname, hardcoding to _ole32
         hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
@@ -622,19 +630,23 @@ if Sys.iswindows()
         @show IID_IClassFactory
 
         # IClassFactory *pIFactory;
-        pIFactory = Ref(Ptr{Cvoid}(0))
+        global pIFactory = Vector{UInt8}(undef, 8)
+        @show pIFactory
 
         # hr = GetClassObject(rclsid, IID_IClassFactory, (LPVOID *)&pIFactory);
-        ccall((:DllGetClassObject, _ole32), HRESULT, (REFCLSID, REFIID, Ptr{LPVOID}),
-            rclsid, IID_IClassFactory, pIFactory)
+        hr = ccall((:DllGetClassObject, _ole32), HRESULT, (REFCLSID, REFIID, Ptr{LPVOID}),
+            rclsid, pointer(IID_IClassFactory), pointer(pIFactory))
         println("$(@__LINE__)")
-        @show pIFactory[]
+        @show pIFactory
+        @show hr
         println("$(@__LINE__)")
-        hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(UInt32(hr), base=16))")
+        hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(UInt64(hr), base=16))")
         println("$(@__LINE__)")
         # 5 functions:
         # QueryInterface, AddRef, Release, CreateInstance, LockServer
-        IFactory = unsafe_wrap(Vector{Ptr{Cvoid}}, pIFactory[], (5, ) )
+        @show unsafe_load(convert(Ptr{Ptr{Ptr{Cvoid}}}, pointer(MbedTLS.pIFactory)))
+        # IFactory = unsafe_wrap(Ptr{IClassFactory}, pointer(pIFactory), (1, ) )
+        # IFactory = unsafe_wrap(Vector{Ptr{Cvoid}}, pIFactory[], (5, ) )
         println("$(@__LINE__)")
 
         ppv = Ref(Ptr{Cvoid}(0))
@@ -682,7 +694,7 @@ if Sys.iswindows()
         #                        IID_ICertAdmin,
         #                        (void **)&pCertAdmin);
         # CLSID_CCertAdmin = UUID("37eabaf0-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
-        CLSID_CCertAdmin =  Vector{UInt8}(undef, 16) # convert(UInt128, 0)
+        CLSID_CCertAdmin =  Vector{UInt128}(undef, 1) #Vector{UInt8}(undef, 16) # convert(UInt128, 0)
 
         hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
             "{37eabaf0-7fb6-11d0-8817-00a0c903b83c}", pointer(CLSID_CCertAdmin))
@@ -690,7 +702,7 @@ if Sys.iswindows()
         # IID_ICertAdmin = UUID("34df6950-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
         # @show string(IID_ICertAdmin, base=16)
 
-        IID_ICertAdmin =  Vector{UInt8}(undef, 16)
+        IID_ICertAdmin =  Vector{UInt128}(undef, 1)
         hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
             "{34df6950-7fb6-11d0-8817-00a0c903b83c}", pointer(IID_ICertAdmin))
         @show IID_ICertAdmin
@@ -702,7 +714,7 @@ if Sys.iswindows()
                         (REFCLSID,        LPUNKNOWN, DWORD,                REFIID,         LPVOID),
                         CLSID_CCertAdmin, C_NULL,    CLSCTX_INPROC_SERVER, IID_ICertAdmin, pCertAdmin ) # TODO: make sure pCertAdmin is populating
         else
-            hr = MyCoCreateInstance(_ole32, CLSID_CCertAdmin, C_NULL, IID_ICertAdmin, pCertAdmin)
+            hr = MyCoCreateInstance(_ole32, pointer(CLSID_CCertAdmin), C_NULL, pointer(IID_ICertAdmin), pCertAdmin)
         end
         @show pCertAdmin
         hr < 0 && error("Failed CoCreateInstance pCertAdmin: HRESULT 0x$(string(UInt32(hr), base=16))")
