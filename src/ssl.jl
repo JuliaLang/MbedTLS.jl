@@ -604,57 +604,22 @@ function load_system_crl!(config::SSLConfig) end
 
 if Sys.iswindows()
     # Access COM Objects without registering
+    # hr = MyCoCreateInstance(_ole32, pointer(CLSID_CCertAdmin), C_NULL, pointer(IID_ICertAdmin), pCertAdmin)
     function MyCoCreateInstance(dllname, rclsid::REFCLSID, pUnkOuter::LPUNKNOWN, riid::REFIID, ppv) #::Ptr{LPVOID})
         hr = 0x80040152; #REGDB_E_KEYMISSING;
-
-        # HMODULE hDll = ::LoadLibrary(szDllName);
-        # if (hDll == 0)
-        #   return hr;
-
-        # typedef HRESULT (__stdcall *pDllGetClassObject)(IN REFCLSID rclsid,
-        #                  IN REFIID riid, OUT LPVOID FAR* ppv);
-        #
-        # pDllGetClassObject GetClassObject =
-        #    (pDllGetClassObject)::GetProcAddress(hDll, "DllGetClassObject");
-        # if (GetClassObject == 0)
-        # {
-        #   ::FreeLibrary(hDll);
-        #   return hr;
-        # }
-
         IID_IClassFactory =  Vector{UInt128}(undef, 1) # convert(UInt128, 0)
-
-        # FIXME: didn't like non-const dllname, hardcoding to _ole32
         hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
             "{00000001-0000-0000-C000-000000000046}", pointer(IID_IClassFactory)) # Unknwn.h
         @show IID_IClassFactory
-
-        # IClassFactory *pIFactory;
         global pIFactory = Vector{Ptr{Ptr{Ptr{Cvoid}}}}(undef, 1)
         @show pIFactory
-
-        # hr = GetClassObject(rclsid, IID_IClassFactory, (LPVOID *)&pIFactory);
         hr = ccall((:DllGetClassObject, _ole32), HRESULT, (REFCLSID, REFIID, Ptr{LPVOID}),
             rclsid, pointer(IID_IClassFactory), pointer(pIFactory))
-        println("$(@__LINE__)")
-        @show pIFactory
+        @show pIFactory # is specific to rclsid
         @show hr
-        println("$(@__LINE__)")
         hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
-        println("$(@__LINE__)")
-        # 5 functions:
-        # QueryInterface, AddRef, Release, CreateInstance, LockServer
-        @show unsafe_load(convert(Ptr{Ptr{Ptr{Cvoid}}}, pointer(MbedTLS.pIFactory)))
-        # IFactory = unsafe_wrap(Ptr{IClassFactory}, pointer(pIFactory), (1, ) )
-        # IFactory = unsafe_wrap(Vector{Ptr{Cvoid}}, pIFactory[], (5, ) )
-        println("$(@__LINE__)")
 
-        ppv = Ref(Ptr{Cvoid}(0))
-        println("$(@__LINE__)")
-        # hr = pIFactory->CreateInstance(pUnkOuter, riid, ppv);
-        # unsafe_load(Ptr{UInt64}(unsafe_load(reinterpret(Ptr{UInt64}, MbedTLS.pIFactory[]), 1)), 1)
-
-
+        # ppv = Ref(Ptr{Cvoid}(0))
         # The interface is stored in Unknwn.h as a pointer to a Vtbl object, so there are multiple layers
         # to unwrap to get to the function calls.
         # See lines 455 to 492 in C:\Program Files (x86)\Windows Kits\10\Include\10.0.18362.0\um\Unknwn.h
@@ -662,6 +627,8 @@ if Sys.iswindows()
         IFactory_this = unsafe_load(MbedTLS.pIFactory[])
         CreateInstance = unsafe_load(IFactory_this, 4)
         println("$(@__LINE__)")
+        # hr = ccall(CreateInstance, HRESULT, (LPVOID, LPUNKNOWN, REFIID, LPVOID), IFactory_this, pUnkOuter, riid, ppv)
+
         hr = ccall(CreateInstance, HRESULT, (LPVOID, LPUNKNOWN, REFIID, LPVOID), IFactory_this, pUnkOuter, riid, ppv)
         println("$(@__LINE__)")
         hr < 0 && error("Failed IFactory::CreateInstance ppv: HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
@@ -698,11 +665,11 @@ if Sys.iswindows()
         #
         # //  Create the CertAdmin object
         # //  and get a pointer to its ICertAdmin interface.
-        # hr = CoCreateInstance( CLSID_CCertAdmin,
-        #                        NULL,
-        #                        CLSCTX_INPROC_SERVER,
-        #                        IID_ICertAdmin,
-        #                        (void **)&pCertAdmin);
+        # hr = CoCreateInstance( CLSID_CCertAdmin,      # rclsid
+        #                        NULL,                  # pUnkOuter
+        #                        CLSCTX_INPROC_SERVER,  # dwClsContext
+        #                        IID_ICertAdmin,        # riid
+        #                        (void **)&pCertAdmin); # ppv
         # CLSID_CCertAdmin = UUID("37eabaf0-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
         CLSID_CCertAdmin =  Vector{UInt128}(undef, 1) #Vector{UInt8}(undef, 16) # convert(UInt128, 0)
 
@@ -717,7 +684,8 @@ if Sys.iswindows()
             "{34df6950-7fb6-11d0-8817-00a0c903b83c}", pointer(IID_ICertAdmin))
         @show IID_ICertAdmin
 
-        pCertAdmin = Ref(Ptr{Cvoid}(0)) #Vector{UInt8}(undef, 16)
+        #pCertAdmin = Ref(Ptr{Cvoid}(0)) #Vector{UInt8}(undef, 16)
+        global pCertAdmin = Vector{Ptr{Ptr{Cvoid}}}(undef, 1)
 
         if false
             hr = ccall((:CoCreateInstance, _ole32), HRESULT,
