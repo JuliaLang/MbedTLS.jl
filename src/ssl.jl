@@ -10,6 +10,7 @@ mutable struct SSLConfig
     cert
     key
     alpn_protos
+    crl_chain::CRL
 
     function SSLConfig()
         conf = new()
@@ -576,6 +577,36 @@ struct CERT_CONTEXT
 end
 PCCERT_CONTEXT = Ptr{CERT_CONTEXT}
 
+struct CRL_ENTRY
+SerialNumber::CRYPT_INTEGER_BLOB  # CRYPT_INTEGER_BLOB SerialNumber;
+RevocationDate::FILETIME          # FILETIME           RevocationDate;
+cExtension::DWORD                 # DWORD              cExtension;
+rgExtension::Ptr{CERT_EXTENSION}  # PCERT_EXTENSION    rgExtension;
+end
+PCRL_ENTRY = Ptr{CRL_ENTRY}
+
+struct CRL_INFO
+    dwVersion::DWORD                               # DWORD                      dwVersion;
+    SignatureAlgorithm::CRYPT_ALGORITHM_IDENTIFIER # CRYPT_ALGORITHM_IDENTIFIER SignatureAlgorithm;
+    Issuer::CERT_NAME_BLOB                         # CERT_NAME_BLOB             Issuer;
+    ThisUpdate::FILETIME                           # FILETIME                   ThisUpdate;
+    NextUpdate::FILETIME                           # FILETIME                   NextUpdate;
+    cCRLEntry::DWORD                               # DWORD                      cCRLEntry;
+    rgCRLEntry::PCRL_ENTRY                         # PCRL_ENTRY                 rgCRLEntry;
+    cExtension::DWORD                              # DWORD                      cExtension;
+    rgExtension::Ptr{CERT_EXTENSION}               # PCERT_EXTENSION            rgExtension;
+end
+PCRL_INFO = Ptr{CRL_INFO}
+
+struct CRL_CONTEXT
+    dwCertEncodingType::DWORD #   DWORD      dwCertEncodingType; # e.g. X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+    pbCrlEncoded::Ptr{BYTE}  #   BYTE       *pbCertEncoded;     # A pointer to a buffer that contains the encoded certificate.
+    cbCrlEncoded::DWORD      #   DWORD      cbCertEncoded;      # The size, in bytes, of the encoded certificate.
+    pCrlInfo::PCRL_INFO     # PCERT_INFO pCertInfo
+    hCertStore::HCERTSTORE    # HCERTSTORE hCertStore
+end
+PCCRL_CONTEXT = Ptr{CRL_CONTEXT}
+
 struct _GUID
     Data::UInt128
     # unsigned long Data1;
@@ -600,151 +631,19 @@ mutable struct IClassFactory
     LockServer::Ptr
 end
 
-function load_system_crl!(config::SSLConfig) end
+# S_OK             Operation successful                   0x00000000
+# E_ABORT          Operation aborted                      0x80004004
+# E_ACCESSDENIED   General access denied error            0x80070005
+# E_FAIL           Unspecified failure                    0x80004005
+# E_HANDLE         Handle that is not valid               0x80070006
+# E_INVALIDARG     One or more arguments are not valid    0x80070057
+# E_NOINTERFACE    No such interface supported            0x80004002
+# E_NOTIMPL        Not implemented                        0x80004001
+# E_OUTOFMEMORY    Failed to allocate necessary memory    0x8007000E
+# E_POINTER        Pointer that is not valid              0x80004003
+# E_UNEXPECTED     Unexpected failure                     0x8000FFFF
 
-if Sys.iswindows()
-    # Access COM Objects without registering
-    # hr = MyCoCreateInstance(_ole32, pointer(CLSID_CCertAdmin), C_NULL, pointer(IID_ICertAdmin), pCertAdmin)
-    function MyCoCreateInstance(dllname, rclsid::REFCLSID, pUnkOuter::LPUNKNOWN, riid::REFIID, ppv) #::Ptr{LPVOID})
-        hr = 0x80040152; #REGDB_E_KEYMISSING;
-        IID_IClassFactory =  Vector{UInt128}(undef, 1) # convert(UInt128, 0)
-        hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
-            "{00000001-0000-0000-C000-000000000046}", pointer(IID_IClassFactory)) # Unknwn.h
-        @show IID_IClassFactory
-        global pIFactory = Vector{Ptr{Ptr{Ptr{Cvoid}}}}(undef, 1)
-        @show pIFactory
-        hr = ccall((:DllGetClassObject, _ole32), HRESULT, (REFCLSID, REFIID, Ptr{LPVOID}),
-            rclsid, pointer(IID_IClassFactory), pointer(pIFactory))
-        @show pIFactory # is specific to rclsid
-        @show hr
-        hr < 0 && error("Failed DllGetClassObject pIFactory: HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
-
-        # ppv = Ref(Ptr{Cvoid}(0))
-        # The interface is stored in Unknwn.h as a pointer to a Vtbl object, so there are multiple layers
-        # to unwrap to get to the function calls.
-        # See lines 455 to 492 in C:\Program Files (x86)\Windows Kits\10\Include\10.0.18362.0\um\Unknwn.h
-        # The fourth element in the Interface is CreateInstance
-        IFactory_this = unsafe_load(MbedTLS.pIFactory[])
-        CreateInstance = unsafe_load(IFactory_this, 4)
-        println("$(@__LINE__)")
-        # hr = ccall(CreateInstance, HRESULT, (LPVOID, LPUNKNOWN, REFIID, LPVOID), IFactory_this, pUnkOuter, riid, ppv)
-
-        hr = ccall(CreateInstance, HRESULT, (LPVOID, LPUNKNOWN, REFIID, LPVOID), IFactory_this, pUnkOuter, riid, ppv)
-        println("$(@__LINE__)")
-        hr < 0 && error("Failed IFactory::CreateInstance ppv: HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
-        println("$(@__LINE__)")
-
-        # pIFactory->Release();
-        hr = ccall(IFactory[3], HRESULT, ())
-        println("$(@__LINE__)")
-        hr < 0 && error("Failed IFactory::Release, HRESULT 0x$(string(reinterpret(UInt32, hr),base=16))")
-        println("$(@__LINE__)")
-
-        return (hr, ppv);
-    end
-
-    # https://docs.microsoft.com/en-us/windows/win32/api/certadm/nf-certadm-icertadmin-getcrl
-    function load_system_crl!(config::SSLConfig)
-        # ICertAdmin * pCertAdmin = NULL;  // pointer to interface object
-        # BSTR bstrCA = NULL;              // variable for machine\CAName
-        # BSTR bstrCRL = NULL;             // variable to contain
-        #                                  // the retrieved CRL
-        #
-        # HRESULT hr;
-        #
-        # //  Initialize COM.
-        # hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-        hr = ccall((:CoInitializeEx, _ole32), HRESULT, (LPVOID, DWORD),
-                    C_NULL, COINIT_APARTMENTTHREADED)
-        hr < 0 && error("Failed CoInitializeEx: HRESULT 0x$(string(reinterpret(UInt64, hr),base=16))")
-        # if (FAILED(hr))
-        # {
-        #     printf("Failed CoInitializeEx [%x]\n", hr);
-        #     goto error;
-        # }
-        #
-        # //  Create the CertAdmin object
-        # //  and get a pointer to its ICertAdmin interface.
-        # hr = CoCreateInstance( CLSID_CCertAdmin,      # rclsid
-        #                        NULL,                  # pUnkOuter
-        #                        CLSCTX_INPROC_SERVER,  # dwClsContext
-        #                        IID_ICertAdmin,        # riid
-        #                        (void **)&pCertAdmin); # ppv
-        # CLSID_CCertAdmin = UUID("37eabaf0-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
-        CLSID_CCertAdmin =  Vector{UInt128}(undef, 1) #Vector{UInt8}(undef, 16) # convert(UInt128, 0)
-
-        hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
-            "{37eabaf0-7fb6-11d0-8817-00a0c903b83c}", pointer(CLSID_CCertAdmin))
-        @show CLSID_CCertAdmin
-        # IID_ICertAdmin = UUID("34df6950-7fb6-11d0-8817-00a0c903b83c").value # CertAdm.h
-        # @show string(IID_ICertAdmin, base=16)
-
-        IID_ICertAdmin =  Vector{UInt128}(undef, 1)
-        hr = ccall((:CLSIDFromString, _ole32), HRESULT, (LPCOLESTR, LPCLSID),
-            "{34df6950-7fb6-11d0-8817-00a0c903b83c}", pointer(IID_ICertAdmin))
-        @show IID_ICertAdmin
-
-        #pCertAdmin = Ref(Ptr{Cvoid}(0)) #Vector{UInt8}(undef, 16)
-        global pCertAdmin = Vector{Ptr{Ptr{Cvoid}}}(undef, 1)
-
-        if false
-            hr = ccall((:CoCreateInstance, _ole32), HRESULT,
-                        (REFCLSID,        LPUNKNOWN, DWORD,                REFIID,         LPVOID),
-                        CLSID_CCertAdmin, C_NULL,    CLSCTX_INPROC_SERVER, IID_ICertAdmin, pCertAdmin ) # TODO: make sure pCertAdmin is populating
-        else
-            hr = MyCoCreateInstance(_ole32, pointer(CLSID_CCertAdmin), C_NULL, pointer(IID_ICertAdmin), pCertAdmin)
-        end
-        @show pCertAdmin
-        hr < 0 && error("Failed CoCreateInstance pCertAdmin: HRESULT 0x$(string(UInt32(hr), base=16))")
-
-        # access the 10 functions insided of the COM interface
-        certAdm = unsafe_wrap(Vector{Ptr{Cvoid}}, pCertAdmin[], (10, ) )
-
-        # if (FAILED(hr))
-        # {
-        #     printf("Failed CoCreateInstance pCertAdmin [%x]\n", hr);
-        #     goto error;
-        # }
-        #
-        # //  Note the use of two backslashes (\\)
-        # //  in C++ to produce one backslash (\).
-        # bstrCA = SysAllocString(L"<COMPUTERNAMEHERE>\\<CANAMEHERE>");
-        # if (FAILED(hr))
-        # {
-        #     printf("Failed to allocate memory for bstrCA\n");
-        #     goto error;
-        # }
-        #
-        # //  Retrieve the CRL.
-        # hr = pCertAdmin->GetCRL( bstrCA, CR_OUT_BINARY, &bstrCRL );
-        # if (FAILED(hr))
-        # {
-        #     printf("Failed GetCRL [%x]\n", hr);
-        #     goto error;
-        # }
-        # else
-        #     printf("CRL retrieved successfully\n");
-        #     //  Use the CRL as needed.
-        #
-        # //  Done processing.
-        #
-        # error:
-        #
-        # //  Free BSTR values.
-        # if (NULL != bstrCA)
-        #     SysFreeString(bstrCA);
-        #
-        # if (NULL != bstrCRL)
-        #     SysFreeString(bstrCRL);
-        #
-        # //  Clean up object resources.
-        # if (NULL != pCertAdmin)
-        #     pCertAdmin->Release();
-        #
-        # //  Free COM resources.
-        # CoUninitialize();
-    end
-end
+# "Class not registered (Exception from HRESULT: 0x80040154 (REGDB_E_CLASSNOTREG))"
 
 """
 
@@ -766,6 +665,7 @@ if Sys.iswindows()
     function ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false)
         # chain = crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem"))
         config.chain = CRT()
+        config.crl_chain = CRL()
 
         # 1. Initialize an mbedTLS certificate using mbedtls_x509_crt_init(my_ca_chain).
         ## default CRT object stored in chain is initialized with mbedtls_x509_crt_init already
@@ -788,7 +688,7 @@ if Sys.iswindows()
 
             pccert_context == C_NULL && error("CertEnumCertificatesInStore returned null on init: \"$(Libc.FormatMessage())\"")
             count = 0
-            last_error = 0
+            last_error = 0 # Libc.GetLastError()
             while last_error != CRYPT_E_NOT_FOUND && pccert_context != C_NULL
                 # println("Cert Count = $(count)")
                 # 4. For each cert in the store, I check that it has X509_ASN_ENCODING.
@@ -832,6 +732,34 @@ if Sys.iswindows()
 
             @assert last_error == CRYPT_E_NOT_FOUND
 
+            if debug_output
+                println("Getting CRLs in Store")
+            end
+            # Done getting certificates.  Now load all the CRLs in the store and push them to MbedTLS
+            pccrl_context = ccall((:CertEnumCRLsInStore, _crypt32), PCCRL_CONTEXT, (HCERTSTORE, PCCRL_CONTEXT),
+                hcertstore, C_NULL)
+            count = 0
+            last_error = 0 # Libc.GetLastError()
+            while last_error != CRYPT_E_NOT_FOUND && pccrl_context != C_NULL
+                store_crl = unsafe_load(pccrl_context)
+                # @show store_crl
+                if (store_crl.dwCertEncodingType & X509_ASN_ENCODING) != 0
+                    ret = ccall((:mbedtls_x509_crl_parse, libmbedx509), Cint,
+                        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+                        config.crl_chain.data, store_crl.pbCrlEncoded, store_crl.cbCrlEncoded)
+                end
+
+                pccrl_context = ccall((:CertEnumCRLsInStore, _crypt32), PCCRL_CONTEXT, (HCERTSTORE, PCCRL_CONTEXT),
+                    hcertstore, pccrl_context)
+
+                last_error = Libc.GetLastError()
+                count += 1
+            end
+
+            if debug_output
+                @show count
+            end
+
             # Cleanup handle to CertStore
             retval = ccall((:CertCloseStore, _crypt32), BOOL, (HCERTSTORE, DWORD),
                 hcertstore, 0)
@@ -843,6 +771,7 @@ if Sys.iswindows()
         ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
             (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
             config.data, config.chain.data, C_NULL)
+
     end
 end
 

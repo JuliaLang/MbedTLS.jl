@@ -55,6 +55,7 @@ include("entropy.jl")
 include("ctr_drbg.jl")
 include("pk.jl")
 include("x509_crt.jl")
+include("x509_crl.jl")
 include("ssl.jl")
 
 function __init__()
