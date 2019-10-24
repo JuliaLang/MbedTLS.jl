@@ -742,8 +742,20 @@ if Sys.iswindows()
             last_error = 0 # Libc.GetLastError()
             while last_error != CRYPT_E_NOT_FOUND && pccrl_context != C_NULL
                 store_crl = unsafe_load(pccrl_context)
+                store_crl_info = unsafe_load(store_crl.pCrlInfo)
                 # @show store_crl
                 if (store_crl.dwCertEncodingType & X509_ASN_ENCODING) != 0
+
+                    if debug_output
+                        buf_size = 1024
+                        buffer = Vector{UInt8}(undef, buf_size)
+                        retval = ccall((:CertNameToStrA, _crypt32), DWORD,
+                            (DWORD, CERT_NAME_BLOB, DWORD, Ptr{UInt8}, DWORD),
+                            X509_ASN_ENCODING, store_crl_info.Issuer, 2, buffer, buf_size)
+                        issuer = String(buffer[1:retval - 1])
+                        println(issuer)
+                    end
+
                     ret = ccall((:mbedtls_x509_crl_parse, libmbedx509), Cint,
                         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
                         config.crl_chain.data, store_crl.pbCrlEncoded, store_crl.cbCrlEncoded)
