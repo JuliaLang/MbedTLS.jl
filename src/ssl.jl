@@ -504,6 +504,7 @@ LPWSTR = Cwstring #Ptr{Cushort} # Cwstring, Ptr{UInt16}
 LPCWSTR = Cwstring #Ptr{Cushort} # Cwstring, Ptr{UInt16}
 LPCOLESTR = Cwstring
 LPSTR = Cstring #Ptr{UInt8} # Cstring?
+LPCSTR = Cstring #Ptr{UInt8} # Cstring?
 BOOL = Cint
 BYTE = Cuchar #Cint #UInt8 # Cint
 DWORD = Culong
@@ -698,9 +699,9 @@ if Sys.iswindows()
                 subject = unsafe_string(store_cert_info.Subject.pbData, store_cert_info.Subject.cbData)
                 if (store_cert.dwCertEncodingType & X509_ASN_ENCODING) != 0
 
+                    buf_size = Int32(2048)
+                    buffer = Vector{UInt8}(undef, buf_size)
                     if debug_output
-                        buf_size = 1024
-                        buffer = Vector{UInt8}(undef, buf_size)
                         # name = ccall((:CertGetNameStringW, _crypt32), DWORD,
                         #     (PCCERT_CONTEXT, DWORD, DWORD, Cvoid, LPSTR, DWORD),
                         #     pccert_context, CERT_NAME_FRIENDLY_DISPLAY_TYPE, CERT_NAME_ISSUER_FLAG)
@@ -709,6 +710,58 @@ if Sys.iswindows()
                             X509_ASN_ENCODING, store_cert_info.Issuer, 2, buffer, buf_size)
                         issuer = String(buffer[1:retval - 1])
                         println(issuer)
+                    end
+
+                    if debug_output
+                        # Print the extra info key value pairs
+                        buf_size_in_out = Vector{Int32}(undef, 1)
+                        for i in 1:store_cert_info.cExtension
+                            # buf_size gets rewritten by CryptFormatObject, so reset it for each pass thru
+                            buf_size = Int32(2048)
+
+                            # @show i
+
+                            cert_extension = unsafe_load(store_cert_info.rgExtension, i)
+
+                            # BOOL CryptFormatObject(
+                            #   DWORD      dwCertEncodingType,
+                            #   DWORD      dwFormatType, # always zero
+                            #   DWORD      dwFormatStrType, # 0 is single line, 0x0001 multiline, 0x0010 no hex
+                            #   void       *pFormatStruct, # always NULL
+                            #   LPCSTR     lpszStructType, # OID, aka cert_extension.pszObjId
+                            #   const BYTE *pbEncoded, # BLOB.pbData
+                            #   DWORD      cbEncoded,  # BLOB.cbData
+                            #   void       *pbFormat, # pointer to buffer
+                            #   DWORD      *pcbFormat # pointer to number of bytes in buffer, retrieves number of bytes set
+                            # );
+                            buf_size_in_out[1] = buf_size
+
+                            retval = ccall((:CryptFormatObject, _crypt32), BOOL,
+                                (DWORD, DWORD, DWORD, Ptr{Cvoid}, LPCSTR,
+                                Ptr{BYTE}, DWORD,
+                                Ptr{Cvoid}, Ptr{DWORD}), #Base.RefValue{Int64}),
+                                store_cert.dwCertEncodingType, 0, 0, C_NULL, cert_extension.pszObjId,
+                                cert_extension.Value.pbData, cert_extension.Value.cbData,
+                                buffer, buf_size_in_out)
+
+                            if retval > 0
+                                # @show buf_size_in_out
+
+                                # cert_extension_val = String(buffer[1:buf_size_in_out[1] - 1])
+                                cert_extension_val = transcode(String, reinterpret(UInt16, buffer[1:buf_size_in_out[1]])[1:end - 1])
+                                #@show unsafe_string(cert_extension.pszObjId), buf_size_in_out[1]
+                                println("  $(i). $(cert_extension_val)")
+                            else
+                                try
+                                    @show buf_size_in_out
+                                    println("Error retrieving extension: \"$(Libc.FormatMessage())\"")
+                                catch
+                                    println("error looking at the error???")
+                                end
+                                #buf_size = Int32(buf_size_in_out[1])
+                                #buffer = Vector{UInt8}(undef, buf_size)
+                            end
+                        end
                     end
 
                     # 5. If so I call mbedtls_x509_crt_parse(my_ca_chain, store_cert->pbCertEncoded, store_cert->cbCertEncoded)
