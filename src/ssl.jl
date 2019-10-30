@@ -1,6 +1,7 @@
 include("debug.jl")
 
 # Data Structures
+using Filetimes
 
 mutable struct SSLConfig
     data::Ptr{Cvoid}
@@ -496,6 +497,7 @@ end
 # https://tls.mbed.org/discussions/crypto-and-ssl/client-ca-load-where-can-i-get-the-right-crt-if-i-access-a-web-site
 const _crypt32 = "Crypt32.dll"
 const _ole32 = "Ole32.dll"
+const _kernel32 = "Kernel32.dll"
 HANDLE = Ptr{Cvoid}
 HCRYPTPROV = HANDLE
 HCRYPTPROV_LEGACY = HCRYPTPROV
@@ -508,6 +510,7 @@ LPCSTR = Cstring #Ptr{UInt8} # Cstring?
 BOOL = Cint
 BYTE = Cuchar #Cint #UInt8 # Cint
 DWORD = Culong
+LONG = Int32
 
 # https://docs.microsoft.com/en-us/windows/win32/com/com-error-codes-4
 const CRYPT_E_NOT_FOUND = 0x80092004
@@ -531,10 +534,11 @@ struct CRYPT_ALGORITHM_IDENTIFIER
     Parameters::CRYPT_OBJID_BLOB # CRYPT_OBJID_BLOB Parameters
 end
 
-struct FILETIME
-  dwLowDateTime::DWORD  # DWORD dwLowDateTime
-  dwHighDateTime::DWORD # DWORD dwHighDateTime
-end
+# struct FILETIME
+#   dwLowDateTime::DWORD  # DWORD dwLowDateTime
+#   dwHighDateTime::DWORD # DWORD dwHighDateTime
+# end
+FILETIME = Int64 # works better with Filetimes.jl
 
 struct CRYPT_BIT_BLOB
   cbData::DWORD      # DWORD cbData
@@ -648,7 +652,7 @@ end
 
 """
 
-    ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false)
+    ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA", "TrustedPublisher"], debug_output=false)
 
 Populate the certificate authority chain with root certificates from the systems root certificate `stores`.
 
@@ -660,10 +664,11 @@ conf = MbedTLS.SSLConfig()
 MbedTLS.ca_chain_with_root_store!(conf; debug_output=true)
 ```
 """
-function ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false) end
+# all_stores = ["AddressBook", "AuthRoot", "CA", "Disallowed", "My", "Root", "TrustedPeople", "TrustedPublisher"]
+function ca_chain_with_root_store!(config::SSLConfig; stores=["CA", "AuthRoot", "Root", "TrustedPublisher"], debug_output=false) end
 
 if Sys.iswindows()
-    function ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA"], debug_output=false)
+    function ca_chain_with_root_store!(config::SSLConfig; stores=["CA", "AuthRoot", "Root", "TrustedPublisher"], debug_output=false)
         # chain = crt_parse_file(joinpath(dirname(@__FILE__), "../deps/cacert.pem"))
         config.chain = CRT()
         config.crl_chain = CRL()
@@ -686,8 +691,8 @@ if Sys.iswindows()
             # 3. Repeatedly call CertEnumCertificatesInStore until CRYPT_E_NOT_FOUND.
             pccert_context = ccall((:CertEnumCertificatesInStore, _crypt32), PCCERT_CONTEXT, (HCERTSTORE, PCCERT_CONTEXT),
                 hcertstore, C_NULL)
-
-            pccert_context == C_NULL && error("CertEnumCertificatesInStore returned null on init: \"$(Libc.FormatMessage())\"")
+            last_error = Libc.GetLastError() & 0x7fffffff
+            pccert_context == C_NULL && (println(stderr, "Skipping certificate store \"$(store)\": CertEnumCertificatesInStore returned null on init: 0x$(string(reinterpret(UInt32, last_error),base=16)) \"$(Libc.FormatMessage(last_error))\""); continue)
             count = 0
             last_error = 0 # Libc.GetLastError()
             while last_error != CRYPT_E_NOT_FOUND && pccert_context != C_NULL
@@ -699,9 +704,10 @@ if Sys.iswindows()
                 subject = unsafe_string(store_cert_info.Subject.pbData, store_cert_info.Subject.cbData)
                 if (store_cert.dwCertEncodingType & X509_ASN_ENCODING) != 0
 
-                    buf_size = Int32(2048)
-                    buffer = Vector{UInt8}(undef, buf_size)
+
                     if debug_output
+                        buf_size = Int32(2048)
+                        buffer = Vector{UInt8}(undef, buf_size)
                         # name = ccall((:CertGetNameStringW, _crypt32), DWORD,
                         #     (PCCERT_CONTEXT, DWORD, DWORD, Cvoid, LPSTR, DWORD),
                         #     pccert_context, CERT_NAME_FRIENDLY_DISPLAY_TYPE, CERT_NAME_ISSUER_FLAG)
@@ -713,7 +719,38 @@ if Sys.iswindows()
                     end
 
                     if debug_output
+                        oid_to_str = Dict{String, String}(
+                            "1.3.6.1.4.1.311.2.1.27" => "SPC_FINANCIAL_CRITERIA_OBJID",
+                            "1.3.6.1.4.1.311.2.1.10" => "SPC_SP_AGENCY_INFO_OBJID",
+                            "1.3.6.1.5.5.7.1.1" => "szOID_AUTHORITY_INFO_ACCESS",
+                            "2.5.29.35" => "szOID_AUTHORITY_KEY_IDENTIFIER2",
+                            "2.5.29.19" => "szOID_BASIC_CONSTRAINTS2",
+                            "2.5.29.32" => "szOID_CERT_POLICIES",
+                            "2.5.29.31" => "szOID_CRL_DIST_POINTS",
+                            "2.5.29.21" => "szOID_CRL_REASON_CODE",
+                            "2.5.29.37" => "szOID_ENHANCED_KEY_USAGE",
+                            "2.5.29.18" => "szOID_ISSUER_ALT_NAME2",
+                            "2.5.29.2" => "szOID_KEY_ATTRIBUTES",
+                            "2.5.29.15" => "szOID_KEY_USAGE",
+                            "2.5.29.4" => "szOID_KEY_USAGE_RESTRICTION",
+                            "1.3.6.1.4.1.311.10.2" => "szOID_NEXT_UPDATE_LOCATION",
+                            "1.2.840.113549.1.9.15" => "szOID_RSA_SMIMECapabilities",
+                            "2.5.29.17" => "szOID_SUBJECT_ALT_NAME2",
+                            "2.5.29.14" => "szOID_SUBJECT_KEY_IDENTIFIER",
+                            "1.2.840.113533.7.65.0" => "entrust version",
+                            "1.3.6.1.4.1.311.20.2" => "szOID_ENROLL_CERTTYPE_EXTENSION",
+                            "1.3.6.1.4.1.311.21.1" => "szOID_CERTSRV_CA_VERSION",
+                            "1.3.6.1.4.1.311.21.2" => "szOID_CERTSRV_PREVIOUS_CERT_HASH",
+                            "1.3.6.1.5.5.7.1.12" => "id-pe-logotype",
+                            "2.16.840.1.113730.1.1" => "SSL client, an SSL server, or a CA",
+                            "2.16.840.1.113730.1.13" => "free-form text comments",
+                            "2.5.29.1" => "CA serial number",
+                            "2.5.29.10" => "basicConstraints",
+                            "2.5.29.16" => "Private key usage period",
+                        )
                         # Print the extra info key value pairs
+                        buf_size = Int32(2048)
+                        buffer = Vector{UInt8}(undef, buf_size)
                         buf_size_in_out = Vector{Int32}(undef, 1)
                         for i in 1:store_cert_info.cExtension
                             # buf_size gets rewritten by CryptFormatObject, so reset it for each pass thru
@@ -743,24 +780,116 @@ if Sys.iswindows()
                                 store_cert.dwCertEncodingType, 0, 0, C_NULL, cert_extension.pszObjId,
                                 cert_extension.Value.pbData, cert_extension.Value.cbData,
                                 buffer, buf_size_in_out)
+                            last_error = Libc.GetLastError()
 
-                            if retval > 0
+                            if retval != 0
                                 # @show buf_size_in_out
 
                                 # cert_extension_val = String(buffer[1:buf_size_in_out[1] - 1])
                                 cert_extension_val = transcode(String, reinterpret(UInt16, buffer[1:buf_size_in_out[1]])[1:end - 1])
-                                #@show unsafe_string(cert_extension.pszObjId), buf_size_in_out[1]
-                                println("  $(i). $(cert_extension_val)")
+                                oid = unsafe_string(cert_extension.pszObjId)
+                                println("  Extension $(i). $(get(oid_to_str, oid, "?? $(oid)")): $(cert_extension_val)")
                             else
                                 try
+                                    println("Error retrieving extension: \"$(Libc.FormatMessage(last_error))\"")
                                     @show buf_size_in_out
-                                    println("Error retrieving extension: \"$(Libc.FormatMessage())\"")
                                 catch
                                     println("error looking at the error???")
                                 end
                                 #buf_size = Int32(buf_size_in_out[1])
                                 #buffer = Vector{UInt8}(undef, buf_size)
                             end
+                        end
+                    end
+
+                    if debug_output
+
+                        prop_id_to_str = Dict{Any,Any}(
+                            0x00000003 => "CERT_SHA1_HASH_PROP_ID", # 3
+                            0x00000004 => "CERT_MD5_HASH_PROP_ID", # 4
+                            0x00000009 => "CERT_ENHKEY_USAGE_PROP_ID", # 9
+                            0x0000000b => "CERT_FRIENDLY_NAME_PROP_ID", # 11, string
+                            0x0000000f => "CERT_SIGNATURE_HASH_PROP_ID", # 15
+                            0x00000014 => "CERT_KEY_IDENTIFIER_PROP_ID", # 20
+                            0x00000018 => "CERT_ISSUER_PUBLIC_KEY_MD5_HASH_PROP_ID", # 24
+                            0x00000019 => "CERT_SUBJECT_PUBLIC_KEY_MD5_HASH_PROP_ID", # 25
+                            0x0000001d => "CERT_SUBJECT_NAME_MD5_HASH_PROP_ID", # 29, CERT_EXTENDED_ERROR_INFO_PROP_ID ?
+                            0x0000004b => "CERT_OCSP_CACHE_PREFIX_PROP_ID", # 75, string
+                            0x00000053 => "CERT_ROOT_PROGRAM_CERT_POLICIES_PROP_ID", # 83
+                            0x00000059 => "CERT_SIGN_HASH_CNG_ALG_PROP_ID", # 89, string
+                            0x0000005c => "CERT_SUBJECT_PUB_KEY_BIT_LENGTH_PROP_ID", # 92
+                            0x00000062 => "CERT_AUTH_ROOT_SHA256_HASH_PROP_ID", # 98
+                            0x00000068 => "CERT_DISALLOWED_FILETIME_PROP_ID", # 104
+                            0x00000069 => "CERT_ROOT_PROGRAM_CHAIN_POLICIES_PROP_ID", # 105
+                            0x0000006b => "CERT_SHA256_HASH_PROP_ID", # 107
+                            0x0000007a => "CERT_DISALLOWED_ENHKEY_USAGE_PROP_ID", # 122
+                            0x0000007c => "CERT_PIN_SHA256_HASH_PROP_ID", # 124
+                            0x0000007e => "CERT_NOT_BEFORE_FILETIME_PROP_ID", # 126
+                            0x0000007f => "CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID"  # 127
+                        )
+                        string_props = [0x0000000b, 0x0000004b, 0x00000059]
+
+                        # get certificate context properties, especially CERT_EXTENDED_ERROR_INFO_PROP_ID
+                        filetime_size = Int32(8)
+                        filetime_buffer = Vector{UInt8}(undef, filetime_size)
+                        filetime_size_in_out = Vector{Int32}(undef, 1)
+
+                        # DWORD CertEnumCertificateContextProperties(
+                        #   PCCERT_CONTEXT pCertContext,
+                        #   DWORD          dwPropId
+                        # );
+                        CERT_DISALLOWED_FILETIME_PROP_ID = 104
+                        filetime_size_in_out[1] = filetime_size
+                        dwPropId = CERT_DISALLOWED_FILETIME_PROP_ID
+                        retval = ccall((:CertGetCertificateContextProperty, _crypt32), BOOL, (PCCERT_CONTEXT, DWORD, Ptr{Cvoid}, Ptr{DWORD}),
+                                        pccert_context, dwPropId, filetime_buffer, filetime_size_in_out)
+                        if retval != 0
+                            @show "NotBefore:", Filetimes.datetime(store_cert_info.NotBefore)
+                            @show "NotAfter:", Filetimes.datetime(store_cert_info.NotAfter)
+                            @show "Disallowed:", Filetimes.datetime(reinterpret(Int64, filetime_buffer[1:filetime_size_in_out[1]])[1])
+                            # @show Filetimes.datetime(store_cert_info.NotBefore)
+                            if false
+                                retval = ccall((:CompareFileTime, _kernel32), LONG, (Ptr{FILETIME}, Ptr{FILETIME}), filetime_buffer, Ref(store_cert_info.NotBefore))
+                                # Disallowed > Not before: 1,  First file time is later than second file time.
+                                # Disallowed < Not after: -1,  First file time is later than second file time.
+                                println("CompareFileTime $(retval) : \"$(Libc.FormatMessage(last_error))\"")
+                            end
+                        end
+
+                        buf_size = Int32(2048)
+                        buffer = Vector{UInt8}(undef, buf_size)
+                        buf_size_in_out = Vector{Int32}(undef, 1)
+                        dwPropId = 0
+                        i = 1
+                        while((dwPropId = ccall((:CertEnumCertificateContextProperties, _crypt32), DWORD, (Ptr{CERT_CONTEXT}, DWORD),
+                                                                                                            pccert_context, dwPropId)) > 0)
+                            # BOOL CertGetCertificateContextProperty(
+                            #   PCCERT_CONTEXT pCertContext,
+                            #   DWORD          dwPropId,
+                            #   void           *pvData,
+                            #   DWORD          *pcbData
+                            # );
+                            # https://docs.microsoft.com/en-us/windows/win32/api/wincrypt/nf-wincrypt-certgetcertificatecontextproperty
+                            buf_size_in_out[1] = buf_size
+                            retval = ccall((:CertGetCertificateContextProperty, _crypt32), BOOL, (PCCERT_CONTEXT, DWORD, Ptr{Cvoid}, Ptr{DWORD}),
+                                            pccert_context, dwPropId, buffer, buf_size_in_out)
+                            # retval = ccall((:CertGetCertificateContextProperty, _crypt32), BOOL, (PCCERT_CONTEXT, DWORD, Ptr{Cvoid}, Ptr{DWORD}),
+                            #                 pccert_context, dwPropId, buffer, buf_size_in_out)
+                            last_error = Libc.GetLastError()
+
+
+                            if retval != 0
+                                cert_property_data = transcode(String, reinterpret(UInt16, buffer[1:buf_size_in_out[1] + mod(buf_size_in_out[1], 2)])[1:end - 1])
+                                println("  Prop $(i). $(get(prop_id_to_str, dwPropId, "?? $(dwPropId)")): $((dwPropId in string_props) ? cert_property_data : "bytes[$(buf_size_in_out[1])]")")
+                            else
+                                try
+                                    println("Error retrieving property: $(get(prop_id_to_str, dwPropId, "??")) \"$(Libc.FormatMessage(last_error))\"")
+                                    @show buf_size_in_out
+                                catch
+                                    println("error looking at the error???")
+                                end
+                            end
+                            i += 1
                         end
                     end
 
@@ -836,7 +965,6 @@ if Sys.iswindows()
         ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
             (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
             config.data, config.chain.data, C_NULL)
-
     end
 end
 
