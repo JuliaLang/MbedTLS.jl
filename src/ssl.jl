@@ -1,7 +1,7 @@
 include("debug.jl")
 
-
 # Data Structures
+using Filetimes
 
 mutable struct SSLConfig
     data::Ptr{Cvoid}
@@ -11,6 +11,7 @@ mutable struct SSLConfig
     cert
     key
     alpn_protos
+    crl_chain::CRL
 
     function SSLConfig()
         conf = new()
@@ -383,7 +384,7 @@ function f_recv(c_bio, buf, nbytes)
     bio = unsafe_pointer_to_objref(c_bio)
     n = bytesavailable(bio)
     if n == 0                                                                   ;@🤖 "f_recv $(isopen(bio) ? "WANT_READ" : "CONN_RESET")"
-        return isopen(bio) ? Cint(MBEDTLS_ERR_SSL_WANT_READ) : 
+        return isopen(bio) ? Cint(MBEDTLS_ERR_SSL_WANT_READ) :
                              Cint(MBEDTLS_ERR_NET_CONN_RESET)
     end
     n = min(nbytes, n)                                                          ;@🤖 "f_recv ⬅️  $n"
@@ -394,7 +395,7 @@ end
 
 # Base ::IO Write Methods -- wrappers for `ssl_unsafe_write`
 
-Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt) = 
+Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt) =
     ssl_unsafe_write(ctx, msg, N)
 
 
@@ -407,7 +408,7 @@ Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 Copy `nbytes` of decrypted data from `ctx` into `buf`.
 Wait for sufficient decrypted data to be available.
 Throw `EOFError` if the peer sends TLS `close_notify` or closes the
-connection before `nbytes` have been copied. 
+connection before `nbytes` have been copied.
 """
 function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
     nread = 0
@@ -490,6 +491,27 @@ function ca_chain!(config::SSLConfig, chain=crt_parse_file(joinpath(dirname(@__F
     ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         config.data, chain.data, C_NULL)
+end
+
+"""
+
+    ca_chain_with_root_store!(config::SSLConfig; stores=["ROOT", "AuthRoot", "CA", "TrustedPublisher"], debug_output=false)
+
+Populate the certificate authority chain with root certificates from the systems root certificate `stores`.
+
+Currently only implemented on Windows.  If `debug_output` is enabled, look at stdout and compare to the certificates found in `certmgr.msc`.
+
+# Example
+```
+conf = MbedTLS.SSLConfig()
+MbedTLS.ca_chain_with_root_store!(conf; debug_output=true)
+```
+"""
+# all_stores = ["AddressBook", "AuthRoot", "CA", "Disallowed", "My", "Root", "TrustedPeople", "TrustedPublisher"]
+function ca_chain_with_root_store! end
+
+if Sys.iswindows()
+    include("ssl_windows.jl")
 end
 
 """
