@@ -1,19 +1,12 @@
 language: julia
 
-sudo: false
-
 os:
   - linux
   - osx
 
 julia:
-  - 1.2
+  - 1.3
   - nightly
-
-env:
-  - JULIA_PROJECT="@."
-  - FORCE_BUILD=true
-  - FORCE_BUILD=false
 
 matrix:
   allow_failures:
@@ -23,4 +16,4 @@ notifications:
   email: false
 
 after_success:
-   - julia -e 'ENV["TRAVIS_JULIA_VERSION"] != "1.2" && ENV["TRAVIS_OS_NAME"] != "linux" && exit(); using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+   - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
