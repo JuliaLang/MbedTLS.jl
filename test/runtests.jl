@@ -171,7 +171,7 @@ end
 
 # Test pk.jl methods
 let
-    key = MbedTLS.parse_keyfile("key.pem")
+    key = MbedTLS.parse_keyfile(joinpath(@__DIR__, "key.pem"))
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
     output = fill(0x00, 256)
@@ -183,23 +183,23 @@ let
         MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), MersenneTwister(0))
     @test signature == output[1:length(signature)]
 
-    key_string = read(open("key.pem", "r"))
+    key_string = read(open(joinpath(@__DIR__, "key.pem"), "r"))
     key = MbedTLS.PKContext()
     MbedTLS.parse_key!(key, key_string)
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
 
-    pubkey_string = read(open("public_key.pem", "r"))
+    pubkey_string = read(open(joinpath(@__DIR__, "public_key.pem"), "r"))
     pubkey = MbedTLS.PKContext()
     MbedTLS.parse_public_key!(pubkey, pubkey_string)
     @test MbedTLS.bitlength(pubkey) == 2048
     @test MbedTLS.get_name(pubkey) == "RSA"
 
-    key = MbedTLS.parse_keyfile("key.pem")
+    key = MbedTLS.parse_keyfile(joinpath(@__DIR__, "key.pem"))
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
 
-    pubkey = MbedTLS.parse_public_keyfile("public_key.pem")
+    pubkey = MbedTLS.parse_public_keyfile(joinpath(@__DIR__, "public_key.pem"))
     @test MbedTLS.bitlength(pubkey) == 2048
     @test MbedTLS.get_name(pubkey) == "RSA"
 
