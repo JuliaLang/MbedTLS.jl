@@ -6,7 +6,7 @@
 
 A wrapper around the [mbed](https://tls.mbed.org/) TLS and cryptography C libary.
 
-Current supported mbedtls version: 2.13.1
+Current supported mbedtls version: 2.16.0 (from [MbedTLS_jll.jl](https://github.com/JuliaBinaryWrappers/MbedTLS_jll.jl))
 
 Usage:
 
