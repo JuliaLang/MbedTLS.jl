@@ -1,7 +1,7 @@
 name = "MbedTLS"
 uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
 authors = ["Jacob Quinn <quinn.jacobd@gmail.com>"]
-version = "1.0.0"
+version = "1.0.1"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
