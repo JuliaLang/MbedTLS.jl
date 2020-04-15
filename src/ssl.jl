@@ -143,7 +143,15 @@ True unless:
  - the peer closed the connection (and the TLS buffer is empty), or
  - an un-handled exception occurred while reading.
 """
-Base.isreadable(ctx::SSLContext) = ctx.isreadable
+function Base.isreadable(ctx::SSLContext)
+    ctx.isreadable || return false
+    # It's possible we received the shutdown, but didn't process it yet - if so,
+    # do that now.
+    if bytesavailable(ctx.bio) > 0 || ssl_check_pending(ctx)
+        ssl_unsafe_read(ctx, Ptr{UInt8}(C_NULL), UInt(0))
+    end
+    return ctx.isreadable
+end
 
 """
 True unless:
