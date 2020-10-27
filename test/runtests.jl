@@ -92,8 +92,7 @@ let
     entropy = MbedTLS.Entropy()
 
     function entropy_func(buf)
-        rng = RandomDevice()
-        buf[:] = rand(rng, UInt8, length(buf))
+        buf[:] = rand(RandomDevice(), UInt8, length(buf))
         return Cint(length(buf))
     end
 
@@ -134,8 +133,7 @@ let
     entropy = MbedTLS.Entropy()
 
     function entropy_func(buf)
-        rng = RandomDevice()
-        buf[:] = rand(rng, UInt8, length(buf))
+        buf[:] = rand(RandomDevice(), UInt8, length(buf))
         return Cint(length(buf))
     end
 
