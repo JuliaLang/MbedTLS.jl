@@ -138,6 +138,8 @@ end
 Sockets.getsockname(ctx::SSLContext) = Sockets.getsockname(ctx.bio)
 
 """
+    isreadable(ctx::SSLContext)
+
 True unless:
  - TLS `close_notify` was received, or
  - the peer closed the connection (and the TLS buffer is empty), or
@@ -154,6 +156,8 @@ function Base.isreadable(ctx::SSLContext)
 end
 
 """
+    iswritable(ctx::SSLContext)
+
 True unless:
  - `close(::SSLContext)` is called, or
  -  the peer closed the connection.
@@ -161,6 +165,8 @@ True unless:
 Base.iswritable(ctx::SSLContext) = !ctx.close_notify_sent && isopen(ctx.bio)
 
 """
+    isopen(ctx::SSLContext)
+
 Same as `iswritable(ctx)`.
 > "...a closed stream may still have data to read in its buffer,
 >  use eof to check for the ability to read data." [?Base.isopen]
@@ -169,6 +175,8 @@ Base.isopen(ctx::SSLContext) = iswritable(ctx)
 
 @static if isdefined(Base, :bytesavailable)
 """
+    bytesavailable(ctx::SSLContext)
+
 Number of decrypted bytes waiting in the TLS buffer.
 """
 Base.bytesavailable(ctx::SSLContext) = ctx.bytesavailable
@@ -177,6 +185,8 @@ Base.nb_available(ctx::SSLContext) = ctx.bytesavailable
 end
 
 """
+    eof(ctx::SSLContext)
+
 True if not `isreadable` and there are no more `bytesavailable` to read.
 """
 function Base.eof(ctx::SSLContext)
@@ -189,6 +199,8 @@ function Base.eof(ctx::SSLContext)
 end
 
 """
+    close(ctx::SSLContext)
+
 Send a TLS `close_notify` message to the peer.
 """
 function Base.close(ctx::SSLContext)                                            ;@💀 "close iswritable=$(iswritable(ctx))"
@@ -412,6 +424,8 @@ Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 # Base ::IO Read Methods -- wrappers for `ssl_unsafe_read`
 
 """
+    unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
+
 Copy `nbytes` of decrypted data from `ctx` into `buf`.
 Wait for sufficient decrypted data to be available.
 Throw `EOFError` if the peer sends TLS `close_notify` or closes the
@@ -429,6 +443,8 @@ function Base.unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
 end
 
 """
+    readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf); kw...)
+
 Copy at most `nbytes` of decrypted data from `ctx` into `buf`.
 If `all=true`: wait for sufficient decrypted data to be available.
 Less than `nbytes` may be copied if the peer sends TLS `close_notify` or closes
@@ -452,6 +468,8 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt;
 end
 
 """
+    readavailable(ctx::SSLContext)
+
 Read available decrypted data from `ctx`,
 but don't wait for more data to arrive.
 

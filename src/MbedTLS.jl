@@ -92,6 +92,18 @@ function tls_dbg_log_secrets(level, filename, number, msg)
     end
 end
 
+"""
+    SSLConfig(cert_file, key_file)
+
+Initialise an SSLConfig from a certificate and key file on disk.
+This is probably the method you want if you are the server in an HTTPS connection or similar.
+
+# Example
+```
+julia> MbedTLS.SSLConfig("self-signed-certificate.pem", "keyfile.pem")
+MbedTLS.SSLConfig()
+```
+"""
 # already defined SSLConfig and SSLContext types in ssl.jl
 function SSLConfig(cert_file, key_file)
     ssl_cert = MbedTLS.crt_parse_file(cert_file)
@@ -107,6 +119,16 @@ function SSLConfig(cert_file, key_file)
     return conf
 end
 
+"""
+    SSLConfig(verify::Bool; log_secrets=nothing)
+
+Initialise a client SSLConfig for connecting to a server.
+
+If `verify` is false, do not check that certificates are valid.
+
+If `log_secrets` is a string, save connection secrets to a file with that name.
+This is useful for decrypting traffic captured with Wireshark when debugging.
+"""
 function SSLConfig(verify::Bool; log_secrets=nothing)
     conf = MbedTLS.SSLConfig()
     MbedTLS.config_defaults!(conf)
