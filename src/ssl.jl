@@ -483,6 +483,11 @@ function Base.readavailable(ctx::SSLContext)
     return resize!(buf, n)
 end
 
+function Base.read(s::MbedTLS.SSLContext, ::Type{UInt8})
+    buf = Vector{UInt8}(undef, 1)
+    readbytes!(s, buf)
+    return buf[1]
+end
 
 
 # Configuration
