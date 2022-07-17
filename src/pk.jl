@@ -15,6 +15,8 @@ mutable struct PKContext
     end
 end
 
+const MBEDTLSLOCK = ReentrantLock()
+
 function parse_keyfile!(ctx::PKContext, path, password="")
     @err_check ccall((:mbedtls_pk_parse_keyfile, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cstring, Cstring),
@@ -87,9 +89,11 @@ end
 
 function sign!(ctx::PKContext, hash_alg::MDKind, hash, output, rng)
     outlen_ref = Ref{Csize_t}(sizeof(output))
-    @err_check ccall((:mbedtls_pk_sign, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Csize_t}, Ptr{Cvoid}, Any),
-        ctx.data, hash_alg, hash, sizeof(hash), output, outlen_ref, c_rng[], rng)
+    @lock MBEDTLSLOCK begin
+        @err_check ccall((:mbedtls_pk_sign, libmbedcrypto), Cint,
+                         (Ptr{Cvoid}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Csize_t}, Ptr{Cvoid}, Any),
+                         ctx.data, hash_alg, hash, sizeof(hash), output, outlen_ref, c_rng[], rng)
+    end
     outlen = outlen_ref[]
     Int(outlen)
 end
