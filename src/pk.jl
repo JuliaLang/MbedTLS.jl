@@ -71,25 +71,29 @@ end
 
 function decrypt!(ctx::PKContext, input, output, rng)
     outlen_ref = Ref{Cint}(0)
-    @err_check ccall((:mbedtls_pk_decrypt, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Cint}, Csize_t, Ptr{Cvoid}, Any),
-        ctx.data, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng[], rng)
+    Base.@lock MBEDTLSLOCK begin
+        @err_check ccall((:mbedtls_pk_decrypt, libmbedcrypto), Cint,
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Cint}, Csize_t, Ptr{Cvoid}, Any),
+            ctx.data, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng[], rng)
+    end
     outlen = outlen_ref[]
     Int(outlen)
 end
 
 function encrypt!(ctx::PKContext, input, output, rng)
     outlen_ref = Ref{Cint}(0)
-    @err_check ccall((:mbedtls_pk_encrypt, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Cint}, Csize_t, Ptr{Cvoid}, Any),
-        ctx.data, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng[], rng)
+    Base.@lock MBEDTLSLOCK begin
+        @err_check ccall((:mbedtls_pk_encrypt, libmbedcrypto), Cint,
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Cint}, Csize_t, Ptr{Cvoid}, Any),
+            ctx.data, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng[], rng)
+    end
     outlen = outlen_ref[]
     Int(outlen)
 end
 
 function sign!(ctx::PKContext, hash_alg::MDKind, hash, output, rng)
     outlen_ref = Ref{Csize_t}(sizeof(output))
-    @lock MBEDTLSLOCK begin
+    Base.@lock MBEDTLSLOCK begin
         @err_check ccall((:mbedtls_pk_sign, libmbedcrypto), Cint,
                          (Ptr{Cvoid}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Csize_t}, Ptr{Cvoid}, Any),
                          ctx.data, hash_alg, hash, sizeof(hash), output, outlen_ref, c_rng[], rng)
