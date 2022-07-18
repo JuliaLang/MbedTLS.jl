@@ -786,7 +786,7 @@ function __sslinit__()
     if isfile(MozillaCACerts_jll.cacert)
         DEFAULT_CERT[] = read(MozillaCACerts_jll.cacert, String)
     else
-        DEFAULT_CERT[] = fallback
+        DEFAULT_CERT[] = read(fallback, String)
     end
     return
 end
