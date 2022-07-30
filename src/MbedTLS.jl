@@ -56,7 +56,7 @@ function __init__()
     __entropyinit__()
 end
 
-tls_dbg(level, filename, number, msg) = @warn "MbedTLS emitted debug info: $msg in $filename:$number"
+tls_dbg(level, filename, number, msg) = Base.@debug "from MbedTLS" msg _file=filename _line=number
 
 secrets_log = ""
 secrets_log_file = ""
