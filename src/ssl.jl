@@ -273,7 +273,12 @@ function f_send(c_bio, buf, nbytes)                                             
     if !isopen(bio) || bio.status == Base.StatusClosing
         return Cint(MBEDTLS_ERR_NET_CONN_RESET)
     end
-    return Cint(unsafe_write(bio, buf, nbytes))
+    try
+        return Cint(unsafe_write(bio, buf, nbytes))
+    catch ex
+        ex isa Base.IOError && return Cint(MBEDTLS_ERR_NET_SEND_FAILED)
+        rethrow() # this may corrupt memory, lead to undefined behavior, or (hopefully) just be badly fatal
+    end
 end
 
 
@@ -415,7 +420,7 @@ function f_recv(c_bio, buf, nbytes) # (Ptr{Cvoid}, Ptr{UInt8}, Csize_t)
             eof(bio) && (                                                       @🤖 "f_recv CONN_EOF";
                 return Cint(MBEDTLS_ERR_SSL_CONN_EOF))
         catch ex                                                                ;@🤖 "f_recv RECV_FAILED"
-            ex isa IOError && return Cint(MBEDTLS_ERR_NET_RECV_FAILED)
+            ex isa Base.IOError && return Cint(MBEDTLS_ERR_NET_RECV_FAILED)
             rethrow()
         end
     end
