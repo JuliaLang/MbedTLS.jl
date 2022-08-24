@@ -239,11 +239,7 @@ function which sends it to the underlying connection (`ctx.bio`).
 See `f_send` and `set_bio!` below.
 """
 function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
-
-    Base.check_open(ctx.bio) # Throw error if `bio` is closed.
-
-    iswritable(ctx) ||
-    throw(ArgumentError("`unsafe_write` requires `iswritable(::SSLContext)`"))
+    ctx.close_notify_sent && throw(ArgumentError("`unsafe_write` requires `!ctx.close_notify_sent`"))
 
     nwritten = 0                                                                ;@🤖 "ssl_write ➡️  $nbytes"
     while nwritten < nbytes
