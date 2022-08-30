@@ -171,12 +171,15 @@ end
 True if not `isreadable` and there are no more `bytesavailable` to read.
 """
 function Base.eof(ctx::SSLContext)
-    if ctx.bytesavailable > 0
-        return false
-    end                                                                         ;@😬 "eof ⌛️"
+    ctx.bytesavailable > 0 && return false
     wait_for_decrypted_data(ctx)
-    @assert ctx.bytesavailable > 0 || !ctx.isreadable
-    return ctx.bytesavailable <= 0
+    # note that the following are racy when there are multiple concurrent
+    # users of an `SSLContext`, but we're at least not going to return
+    # true until ctx.isreadable is false, which means we received a
+    # close_notify, the underlying connection was closed, or some
+    # other fatal ssl error occurred
+    ctx.bytesavailable > 0 && return false
+    return !ctx.isreadable
 end
 
 """
@@ -304,7 +307,7 @@ function wait_for_decrypted_data(ctx)
     try
         while ctx.isreadable && ctx.bytesavailable <= 0
             if !ssl_check_pending(ctx)                                          ;@🤖 "wait_for_encrypted_data ⌛️";
-                wait_for_encrypted_data(ctx)
+                eof(ctx.bio)
             end
             ssl_unsafe_read(ctx, Ptr{UInt8}(C_NULL), UInt(0))                   ;@🤖 "wait_for_decrypted_data 📥  $(ctx.bytesavailable)"
         end
@@ -388,14 +391,6 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
 
     @assert false "unreachable"
 end
-
-
-# Receiving Encrypted Data
-
-function wait_for_encrypted_data(ctx)
-    eof(ctx.bio)
-end
-
 
 """
 Copy at most `nbytes` of encrypted data to `buf` from the `bio` connection.
