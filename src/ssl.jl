@@ -166,23 +166,6 @@ Base.nb_available(ctx::SSLContext) = ctx.bytesavailable
 end
 
 """
-    eof(ctx::SSLContext)
-
-True if not `isreadable` and there are no more `bytesavailable` to read.
-"""
-function Base.eof(ctx::SSLContext)
-    ctx.bytesavailable > 0 && return false
-    wait_for_decrypted_data(ctx)
-    # note that the following are racy when there are multiple concurrent
-    # users of an `SSLContext`, but we're at least not going to return
-    # true until ctx.isreadable is false, which means we received a
-    # close_notify, the underlying connection was closed, or some
-    # other fatal ssl error occurred
-    ctx.bytesavailable > 0 && return false
-    return !ctx.isreadable
-end
-
-"""
     close(ctx::SSLContext)
 
 Send a TLS `close_notify` message to the peer.
@@ -228,9 +211,6 @@ function closewrite(ctx::SSLContext)                                            
     nothing
 end
 
-
-
-
 # Sending Data
 
 """
@@ -242,7 +222,7 @@ function which sends it to the underlying connection (`ctx.bio`).
 See `f_send` and `set_bio!` below.
 """
 function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
-    ctx.close_notify_sent && throw(ArgumentError("`unsafe_write` requires `!ctx.close_notify_sent`"))
+    ctx.close_notify_sent && throw(Base.IOError("`unsafe_write` requires `!ctx.close_notify_sent`", 0))
 
     nwritten = 0                                                                ;@🤖 "ssl_write ➡️  $nbytes"
     while nwritten < nbytes
@@ -254,7 +234,7 @@ function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
             continue
         elseif n < 0
             ssl_abandon(ctx)                                                    ;@🤖 "ssl_write 💥"
-            throw(MbedException(n))
+            throw(Base.IOError(strerror(n), n))
         end
         nwritten += n
     end
@@ -295,14 +275,18 @@ end
 # Receiving Data
 
 """
-While there are no decrypted bytes available but the connection is readable:
- - If the TLS buffer has no pending (unprocessed) data wait for
-   more encrypted data to arrive on the underlying connection.
- - Run a zero-byte read to allow the library to process its internal buffer,
-   and/or read from the underlying connection.
- - `ssl_unsafe_read` updates the `isreadable` and `bytesavailable` state.
+    eof(ctx::SSLContext)
+
+True if not `isreadable` and there are no more `bytesavailable` to read.
 """
-function wait_for_decrypted_data(ctx)
+function Base.eof(ctx::SSLContext)
+    ctx.bytesavailable > 0 && return false
+    # While there are no decrypted bytes available but the connection is readable:
+    # - If the TLS buffer has no pending (unprocessed) data, wait for
+    # more encrypted data to arrive on the underlying connection.
+    # - Run a zero-byte read to allow the library to process its internal buffer,
+    # and/or read from the underlying connection.
+    # - `ssl_unsafe_read` updates the `isreadable` and `bytesavailable` state.
     lock(ctx.waitlock)
     try
         while ctx.isreadable && ctx.bytesavailable <= 0
@@ -314,8 +298,14 @@ function wait_for_decrypted_data(ctx)
     finally
         unlock(ctx.waitlock)
     end
+    # note that the following are racy when there are multiple concurrent
+    # users of an `SSLContext`, but we're at least not going to return
+    # true until ctx.isreadable is false, which means we received a
+    # close_notify, the underlying connection was closed, or some
+    # other fatal ssl error occurred
+    ctx.bytesavailable > 0 && return false
+    return !ctx.isreadable
 end
-
 
 """
     ssl_unsafe_read(::SSLContext, buf, nbytes)
@@ -342,8 +332,7 @@ When an unhandled exception occurs `isreadable` is set to false.
 """
 function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
 
-    ctx.isreadable ||
-    throw(ArgumentError("`ssl_unsafe_read` requires `isreadable(::SSLContext)`"))
+    ctx.isreadable || throw(Base.IOError("`ssl_unsafe_read` requires `isreadable(::SSLContext)`", 0))
 
     nread::UInt = 0
     try
@@ -372,8 +361,7 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
                 ctx.bytesavailable = 0                                          ;@😬 "ssl_read ⌛️ $nread"
                 return nread
             elseif n < 0
-                ssl_abandon(ctx)
-                throw(MbedException(n))
+                throw(Base.IOError(strerror(n), n))
             end
 
             nread += n
@@ -384,7 +372,7 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
                 return nread
             end
         end
-    catch e                                                                     ;@💀 "ssl_read 💥"
+    catch                                                                       ;@💀 "ssl_read 💥"
         ssl_abandon(ctx)
         rethrow()
     end
