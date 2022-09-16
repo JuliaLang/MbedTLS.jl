@@ -1,8 +1,8 @@
 # MbedTLS
 
-[![Build Status](https://travis-ci.org/JuliaLang/MbedTLS.jl.svg?branch=master)](https://travis-ci.org/JuliaLang/MbedTLS.jl)
+[![CI](https://github.com/JuliaLang/MbedTLS.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/JuliaLang/MbedTLS.jl/actions/workflows/ci.yml)
 [![codecov.io](https://codecov.io/github/JuliaLang/MbedTLS.jl/coverage.svg?branch=master)](http://codecov.io/github/JuliaWeb/MbedTLS.jl?branch=master)
-[![PkgEval](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/M/MbedTLS.svg)](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/report.html)
+[![pkgeval](https://juliahub.com/docs/MbedTLS/pkgeval.svg)](https://juliahub.com/ui/Packages/MbedTLS/bf9T0)
 
 A wrapper around the [mbed](https://tls.mbed.org/) TLS and cryptography C libary.
 
