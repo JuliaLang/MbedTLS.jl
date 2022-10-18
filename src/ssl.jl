@@ -202,7 +202,7 @@ function closewrite(ctx::SSLContext)                                            
                       "never returns ...WANT_READ/WRITE."
     elseif n != 0
         ssl_abandon(ctx)
-        throw(MbedException(n))
+        throw(Base.IOError(strerror(n), n))
     elseif !ctx.isreadable
         # already seen EOF, so we can go ahead and destroy this now immediately
         close(ctx.bio)
