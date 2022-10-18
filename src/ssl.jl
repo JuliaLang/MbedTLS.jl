@@ -326,7 +326,7 @@ When TLS `close_notify` is received:
    [RFC5246 7.2.1]: "Any data received after a closure alert is ignored."
  - the number of bytes read before the `close_notify` is returned as usual.
 
-Throws a `MbedException` if `ssl_read` returns an unhandled error code.
+Throws a `IOError` if `ssl_read` returns an unhandled error code.
 
 When an unhandled exception occurs `isreadable` is set to false.
 """
