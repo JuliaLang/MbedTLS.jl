@@ -78,7 +78,7 @@ function handshake(ctx::SSLContext)
             end
         else
             ssl_abandon(ctx)                                                    ;@💀 "🤝  💥"
-            throw(Base.IOError(strerror(n), n))
+            mbed_ioerr(n)
         end
     end
                                                                                 ;@😬 "🤝  ✅"
@@ -108,7 +108,7 @@ function ssl_abandon(ctx::SSLContext)                                           
     ctx.close_notify_sent = true
     close(ctx.bio)
     n = ssl_session_reset(ctx)
-    n == 0 || throw(Base.IOError(strerror(n), n))
+    n == 0 || mbed_ioerr(n)
     nothing
 end
 
@@ -202,7 +202,7 @@ function closewrite(ctx::SSLContext)                                            
                       "never returns ...WANT_READ/WRITE."
     elseif n != 0
         ssl_abandon(ctx)
-        throw(Base.IOError(strerror(n), n))
+        mbed_ioerr(n)
     elseif !ctx.isreadable
         # already seen EOF, so we can go ahead and destroy this now immediately
         close(ctx.bio)
@@ -234,7 +234,7 @@ function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
             continue
         elseif n < 0
             ssl_abandon(ctx)                                                    ;@🤖 "ssl_write 💥"
-            throw(Base.IOError(strerror(n), n))
+            mbed_ioerr(n)
         end
         nwritten += n
     end
@@ -361,7 +361,7 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
                 ctx.bytesavailable = 0                                          ;@😬 "ssl_read ⌛️ $nread"
                 return nread
             elseif n < 0
-                throw(Base.IOError(strerror(n), n))
+                mbed_ioerr(n)
             end
 
             nread += n
