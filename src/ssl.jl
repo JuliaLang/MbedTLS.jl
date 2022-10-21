@@ -361,6 +361,7 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
                 ctx.bytesavailable = 0                                          ;@😬 "ssl_read ⌛️ $nread"
                 return nread
             elseif n < 0
+                ssl_abandon(ctx)
                 mbed_ioerr(n)
             end
 
