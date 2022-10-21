@@ -78,7 +78,7 @@ function handshake(ctx::SSLContext)
             end
         else
             ssl_abandon(ctx)                                                    ;@💀 "🤝  💥"
-            throw(MbedException(n))
+            throw(Base.IOError(strerror(n), n))
         end
     end
                                                                                 ;@😬 "🤝  ✅"
@@ -108,7 +108,7 @@ function ssl_abandon(ctx::SSLContext)                                           
     ctx.close_notify_sent = true
     close(ctx.bio)
     n = ssl_session_reset(ctx)
-    n == 0 || throw(MbedException(n))
+    n == 0 || throw(Base.IOError(strerror(n), n))
     nothing
 end
 
