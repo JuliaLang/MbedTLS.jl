@@ -15,6 +15,7 @@ function show(io::IO, err::MbedException)
 end
 
 mbed_err(ret) = throw(MbedException(ret))
+mbed_ioerr(ret) = throw(Base.IOError(strerror(ret), ret))
 
 function strerror(ret, bufsize=1000)
     buf = Vector{UInt8}(undef, bufsize)
