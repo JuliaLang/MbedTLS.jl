@@ -780,10 +780,16 @@ function __sslinit__()
     c_recv[] = @cfunction(f_recv, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
     c_dbg[] = @cfunction(f_dbg, Cvoid, (Any, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
     # Note: `MozillaCACerts_jll.cacert` is filled by `__init__`
-    fallback = abspath(joinpath(Sys.BINDIR, "..", "share", "julia", "cert.pem"))
-    if isfile(MozillaCACerts_jll.cacert)
-        DEFAULT_CERT[] = read(MozillaCACerts_jll.cacert, String)
+    if "MBEDTLSJL_CERT_PEM_FILE" in keys(ENV)
+        fallback = abspath(ENV["JULIA_CERT_PEM_DIR"])
+        DEFAULT_CERT[] = read(fallback, String)
+    elseif "MBEDTLSJL_CERT_PEM_DIR" in keys(ENV)
+        fallback = abspath(joinpath(Sys.BINDIR, "cert.pem"))
+        DEFAULT_CERT[] = read(fallback, String)
+    elseif isfile(MozillaCACerts_jll.cacert)
+        DEFAULT_CERT[] = read(MozillaCACerts_jll.cacert,   String)
     else
+        fallback = abspath(joinpath(Sys.BINDIR, "..", "share", "julia", "cert.pem"))
         DEFAULT_CERT[] = read(fallback, String)
     end
     return
