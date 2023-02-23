@@ -1,6 +1,6 @@
 module MbedTLS
 
-using Random, Sockets, MbedTLS_jll, MozillaCACerts_jll
+using Random, Sockets, MbedTLS_jll, MozillaCACerts_jll, NetworkOptions
 import Sockets: TCPSocket
 
 export

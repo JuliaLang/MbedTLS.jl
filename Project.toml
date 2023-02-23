@@ -7,6 +7,7 @@ version = "1.1.7"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 MbedTLS_jll = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 MozillaCACerts_jll = "14a3606d-f60d-562e-9121-12d972cd8159"
+NetworkOptions = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 
