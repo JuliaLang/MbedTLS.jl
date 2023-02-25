@@ -665,8 +665,8 @@ https://tls.mbed.org/api/ssl_8h.html#a4075f7de9877fd667bcfa2e819e33426
 """
 function ssl_check_pending(ctx::SSLContext)::Bool
     @lockdata ctx begin
-	return ccall((:mbedtls_ssl_check_pending, libmbedtls),
-		     Cint, (Ptr{Cvoid},), ctx.data) > 0
+    return ccall((:mbedtls_ssl_check_pending, libmbedtls),
+             Cint, (Ptr{Cvoid},), ctx.data) > 0
     end
 end
 
@@ -786,6 +786,8 @@ function __sslinit__()
     elseif haskey(ENV, "MBEDTLSJL_CERT_PEM_DIR")
         fallback = abspath(joinpath(ENV["MBEDTLSJL_CERT_PEM_DIR"], "cert.pem"))
         DEFAULT_CERT[] = read(fallback, String)
+    elseif NetworkOptions.ca_roots() !== nothing && isfile(NetworkOptions.ca_roots())
+        DEFAULT_CERT[] = read(NetworkOptions.ca_roots(), String)
     elseif isfile(MozillaCACerts_jll.cacert)
         DEFAULT_CERT[] = read(MozillaCACerts_jll.cacert, String)
     else
