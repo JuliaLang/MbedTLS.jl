@@ -701,11 +701,23 @@ closed.
 https://tls.mbed.org/api/ssl_8h.html#aa2c29eeb1deaf5ad9f01a7515006ede5
 """
 function ssl_read(ctx::SSLContext, ptr, n)::Int
+    ret = 0
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_read, libmbedtls), Cint,
-                     (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                     ctx.data, ptr, n)
+        # We want to allow GC to run while this thread is in the `ccall`.
+        # When https://github.com/JuliaLang/julia/pull/49933 is completed
+        # and lands, this should be changed to what is required by that.
+        ccd = Base.cconvert(Ptr{Cvoid}, ctx.data)
+        cptr = Base.cconvert(Ptr{Cvoid}, ptr)
+        GC.@preserve ccd cptr begin
+            ucd = Base.unsafe_convert(Ptr{Cvoid}, ccd)::Ptr{Cvoid}
+            ucptr = Base.unsafe_convert(Ptr{Cvoid}, cptr)::Ptr{Cvoid}
+            gc_state = @ccall(jl_gc_safe_enter()::Int8)
+            ret = ccall((:mbedtls_ssl_read, libmbedtls), Cint,
+                        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
+            @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
+        end
     end
+    return ret
 end
 
 """
@@ -726,11 +738,23 @@ connection; the current connection must be closed.
 https://tls.mbed.org/api/ssl_8h.html#a5bbda87d484de82df730758b475f32e5
 """
 function ssl_write(ctx::SSLContext, ptr, n)::Int
+    ret = 0
     @lockdata ctx begin
-        return ccall((:mbedtls_ssl_write, libmbedtls), Cint,
-                     (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-                     ctx.data, ptr, n)
+        # We want to allow GC to run while this thread is in the `ccall`.
+        # When https://github.com/JuliaLang/julia/pull/49933 is completed
+        # and lands, this should be changed to what is required by that.
+        ccd = Base.cconvert(Ptr{Cvoid}, ctx.data)
+        cptr = Base.cconvert(Ptr{Cvoid}, ptr)
+        GC.@preserve ccd cptr begin
+            ucd = Base.unsafe_convert(Ptr{Cvoid}, ccd)::Ptr{Cvoid}
+            ucptr = Base.unsafe_convert(Ptr{Cvoid}, cptr)::Ptr{Cvoid}
+            gc_state = @ccall(jl_gc_safe_enter()::Int8)
+            ret = ccall((:mbedtls_ssl_write, libmbedtls), Cint,
+                        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
+            @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
+        end
     end
+    return ret
 end
 
 """
