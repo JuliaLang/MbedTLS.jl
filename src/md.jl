@@ -84,8 +84,8 @@ function MD(kind::MDKind, key)
         (Ptr{Cvoid}, Ptr{Cvoid}, Cint),
         ctx.data, ctx.info.data, 1)
     @err_check ccall((:mbedtls_md_hmac_starts, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-        ctx.data, pointer(key), sizeof(key))
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+        ctx.data, key, sizeof(key))
     ctx
 end
 
@@ -145,14 +145,14 @@ Base.write(ctx::MD, i::Int8) = _write(ctx, Ref(i), sizeof(i))
 
 function finish!(ctx::MD{false}, buf)
     @err_check ccall((:mbedtls_md_finish, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}),
-        ctx.data, pointer(buf))
+        (Ptr{Cvoid}, Ptr{UInt8}),
+        ctx.data, buf)
 end
 
 function finish!(ctx::MD{true}, buf)
     @err_check ccall((:mbedtls_md_hmac_finish, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}),
-        ctx.data, pointer(buf))
+        (Ptr{Cvoid}, Ptr{UInt8}),
+        ctx.data, buf)
 end
 
 function finish!(ctx::MD)
@@ -169,8 +169,8 @@ end
 
 function digest!(kind::MDKind, msg, buf)
     @err_check ccall((:mbedtls_md, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}),
-        MDInfo(kind).data, pointer(msg), sizeof(msg), pointer(buf))
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}),
+        MDInfo(kind).data, msg, sizeof(msg), buf)
 end
 
 """
@@ -201,9 +201,9 @@ end
 
 function digest!(kind::MDKind, msg, key, buf)
     @err_check ccall((:mbedtls_md_hmac, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}),
-        MDInfo(kind).data, pointer(key), sizeof(key),
-        pointer(msg), sizeof(msg), pointer(buf))
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t, Ptr{UInt8}),
+        MDInfo(kind).data, key, sizeof(key),
+        msg, sizeof(msg), buf)
 end
 
 function digest(kind::MDKind, msg, key)

@@ -456,7 +456,7 @@ function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt;
                          all::Bool=true)
     nbytes <= length(buf) || throw(ArgumentError("`buf` too small!"))
     nread = 0
-    while nread < nbytes
+    GC.@preserve buf while nread < nbytes
         nread += ssl_unsafe_read(ctx, pointer(buf) + nread, nbytes - nread)
         if (nread == nbytes) || !all || eof(ctx)
             break
@@ -477,7 +477,7 @@ The amount of decrypted data that can be read at once is limited by
 function Base.readavailable(ctx::SSLContext)
     n = UInt(MBEDTLS_SSL_MAX_CONTENT_LEN)
     buf = Vector{UInt8}(undef, n)
-    n = ssl_unsafe_read(ctx, pointer(buf), n)                                   ;@😬 "readavailable ⬅️  $n"
+    GC.@preserve buf n = ssl_unsafe_read(ctx, pointer(buf), n)                  ;@😬 "readavailable ⬅️  $n"
     return resize!(buf, n)
 end
 
