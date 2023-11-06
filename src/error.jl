@@ -19,7 +19,7 @@ mbed_ioerr(ret) = throw(Base.IOError(strerror(ret), ret))
 
 function strerror(ret, bufsize=1000)
     buf = Base.StringVector(bufsize)
-    ccall((:mbedtls_strerror, libmbedcrypto), Cint,
+    ccall((:mbedtls_strerror, libmbedcrypto), Cvoid,
         (Cint, Ptr{Cvoid}, Csize_t),
         ret, buf, bufsize)
     resize!(buf, something(findfirst(0x00, buf), length(buf) + 1) - 1)
