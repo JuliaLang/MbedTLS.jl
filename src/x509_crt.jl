@@ -16,11 +16,13 @@ end
 show(io::IO, crt::CRT) = print(io, crt_info(crt))
 
 function crt_info(crt::CRT)
-    buf = zeros(UInt8, 1000)
-    ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
+    buf = Base.StringVector(1000)
+    ret = ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
         (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
-        buf, 1000, "", crt.data)
-    GC.@preserve buf unsafe_string(pointer(buf))
+        buf, length(buf), "", crt.data)
+    ret >= 0 || mbed_err(ret)
+    resize!(buf, ret)
+    return String(buf)
 end
 
 function crt_parse!(chain, buf::String)

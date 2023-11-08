@@ -199,8 +199,8 @@ function set_key!(cipher::Cipher, key, op::Operation)
     key_b = tobytes(key)
     keysize = 8 * sizeof(key_b)  # Convert key size from bytes to bits
     @err_check ccall((:mbedtls_cipher_setkey, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Cint, Cint),
-        cipher.data, pointer(key_b), keysize, Int(op))
+        (Ptr{Cvoid}, Ptr{UInt8}, Cint, Cint),
+        cipher.data, key_b, keysize, Int(op))
     key
 end
 
@@ -212,8 +212,8 @@ end
 function set_iv!(cipher::Cipher, iv)
     iv_b = tobytes(iv)
     @err_check ccall((:mbedtls_cipher_set_iv, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-        cipher.data, pointer(iv_b), sizeof(iv_b))
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+        cipher.data, iv_b, sizeof(iv_b))
 end
 
 """
@@ -263,7 +263,7 @@ function crypt!(cipher::Cipher, iv, buf_in, buf_out)
     iv_b, iv_size = process_iv(iv, cipher)
     buf_in_b = tobytes(buf_in)
     @err_check ccall((:mbedtls_cipher_crypt, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Ptr{Csize_t}),
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ptr{Csize_t}),
         cipher.data, iv_b, iv_size, buf_in_b, sizeof(buf_in_b),
         buf_out, olen_ref)
     Int(olen_ref[])
