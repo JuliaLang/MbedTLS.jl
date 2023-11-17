@@ -95,7 +95,15 @@ function testverify(certfile, keyfile, badcafile)
     @info("connecting to port $port")
     badsslconfig = MbedTLS.SSLConfig(true)
     badsslconfig.chain = MbedTLS.crt_parse(read(badcafile, String))
-    @test_throws r"Certificate verification failed" sslconnect("127.0.0.1", port, badsslconfig)
+    try
+        clntconn = sslconnect("127.0.0.1", port, badsslconfig)
+    catch e
+        @test contains(e.msg, "Certificate verification failed")
+    end
+    if @isdefined(clntconn)
+        close(clntconn)
+        @test "No exception raised for certificate verification failure"
+    end
     @test take!(trigger)
     wait(r)
 
