@@ -258,6 +258,12 @@ mktempdir() do d
     @test occursin(r"^CLIENT_RANDOM [0-9a-f]{64} [0-9a-f]{96}$", read(f, String))
 end
 
+# Unit test for MBedTLS errorshow (#274)
+let buf = IOBuffer()
+    Base.display_error(buf, try MbedTLS.mbed_err(1); catch err; err; end, nothing)
+    @test occursin("Generic error", String(take!(buf)))
+end
+
 let
     include("clntsrvr/clntsrvr.jl")
 end
