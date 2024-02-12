@@ -48,6 +48,12 @@ function parse_public_key!(ctx::PKContext, key)
         ctx.data, key_bs, sizeof(key_bs) + 1)
 end
 
+function parse_public_key(key)
+    ctx = PKContext()
+    parse_public_key!(ctx, key)
+    ctx
+end
+
 function parse_key!(ctx::PKContext, key, maybe_pw = nothing)
     key_bs = String(key)
     if maybe_pw === nothing
@@ -60,6 +66,12 @@ function parse_key!(ctx::PKContext, key, maybe_pw = nothing)
     @err_check ccall((:mbedtls_pk_parse_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cuchar}, Csize_t, Ptr{Cuchar}, Csize_t),
         ctx.data, key_bs, sizeof(key_bs) + 1, pw, pw_size)
+end
+
+function parse_key(key, maybe_pw = nothing)
+    ctx = PKContext()
+    parse_key!(ctx, key, maybe_pw)
+    ctx
 end
 
 function bitlength(ctx::PKContext)
