@@ -187,6 +187,7 @@ let
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
 
+    key_string = read(open(joinpath(@__DIR__, "key.pem"), "r"))
     key = MbedTLS.parse_key(key_string)
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
@@ -197,6 +198,7 @@ let
     @test MbedTLS.bitlength(pubkey) == 2048
     @test MbedTLS.get_name(pubkey) == "RSA"
 
+    pubkey_string = read(open(joinpath(@__DIR__, "public_key.pem"), "r"))
     pubkey = MbedTLS.parse_public_key(pubkey_string)
     @test MbedTLS.bitlength(pubkey) == 2048
     @test MbedTLS.get_name(pubkey) == "RSA"
