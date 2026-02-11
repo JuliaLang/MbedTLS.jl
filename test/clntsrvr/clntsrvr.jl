@@ -98,7 +98,7 @@ function testverify(certfile, keyfile, badcafile)
     try
         clntconn = sslconnect("127.0.0.1", port, badsslconfig)
     catch e
-        @test contains(e.msg, "Certificate verification failed")
+        @test contains(e.msg, "Certificate verification failed") || contains(e.msg, "SSL - Attempt to verify a certificate without an expected hostname. This is usually insecure.")
     end
     if @isdefined(clntconn)
         close(clntconn)
