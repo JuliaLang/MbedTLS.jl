@@ -197,6 +197,15 @@ let
     @test MbedTLS.bitlength(key) == 2048
     @test MbedTLS.get_name(key) == "RSA"
 
+    let rsa = MbedTLS.RSA(key)
+        MbedTLS.complete!(rsa)
+        buf = IOBuffer()
+        MbedTLS.mpi_export!(buf, rsa.E)
+        MbedTLS.mpi_export!(buf, rsa.N)
+        arr = take!(buf)
+        @test sizeof(arr) == 259
+    end
+
     pubkey = MbedTLS.parse_public_keyfile(joinpath(@__DIR__, "public_key.pem"))
     @test MbedTLS.bitlength(pubkey) == 2048
     @test MbedTLS.get_name(pubkey) == "RSA"
