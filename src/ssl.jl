@@ -248,7 +248,7 @@ end
 Copy `nbytes` of encrypted data from `buf` to the underlying `bio` connection.
 """
 function f_send(c_bio, buf, nbytes)                                             ;@🤖 "f_send ➡️  $nbytes"
-    bio = unsafe_pointer_to_objref(c_bio)
+    bio = unsafe_pointer_to_objref(c_bio)::SSLContext
     if !isopen(bio) || bio.status == Base.StatusClosing
         return Cint(MBEDTLS_ERR_NET_CONN_RESET)
     end
@@ -390,7 +390,7 @@ If no encrypted bytes are available return:
 """
 function f_recv(c_bio, buf, nbytes) # (Ptr{Cvoid}, Ptr{UInt8}, Csize_t)
     @assert nbytes > 0
-    bio = unsafe_pointer_to_objref(c_bio)
+    bio = unsafe_pointer_to_objref(c_bio)::SSLContext
     n = bytesavailable(bio)
     if n == 0
         # TODO: we should be able to forward this value directly from wait_for_encrypted_data
