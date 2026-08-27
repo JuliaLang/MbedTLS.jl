@@ -92,6 +92,7 @@ function tls_dbg_log_secrets(level, filename, number, msg)
     end
 end
 
+# already defined SSLConfig and SSLContext types in ssl.jl
 """
     SSLConfig(cert_file, key_file)
 
@@ -104,7 +105,6 @@ julia> MbedTLS.SSLConfig("self-signed-certificate.pem", "keyfile.pem")
 MbedTLS.SSLConfig()
 ```
 """
-# already defined SSLConfig and SSLContext types in ssl.jl
 function SSLConfig(cert_file, key_file)
     ssl_cert = MbedTLS.crt_parse_file(cert_file)
     key = MbedTLS.parse_keyfile(key_file)
