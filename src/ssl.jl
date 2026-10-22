@@ -823,7 +823,8 @@ struct X509Buf
     p::Ptr{UInt8}
 end
 
-# The leading fields of `mbedtls_x509_crt`, which are the same in every Mbed TLS 2.x release.
+# The leading fields of `mbedtls_x509_crt` from Mbed TLS 2.17 through 2.28. Mbed TLS 2.16 lacks
+# `own_buffer`; the `MbedTLS_jll` compat excludes it.
 struct X509CrtHead
     own_buffer::Cint
     raw::X509Buf
