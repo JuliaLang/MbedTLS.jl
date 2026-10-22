@@ -11,21 +11,26 @@ mutable struct SSLConfig
     cert
     key
     alpn_protos
+    # One reference held by the config itself, plus one per `SSLContext` set up with it.
+    # `mbedtls_ssl_free` reads the config, so `data` is freed only once all are released.
+    refs::Threads.Atomic{Int}
 
     function SSLConfig()
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
+        conf.refs = Threads.Atomic{Int}(1)
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-        finalizer(x->begin
-            data = x.data
-            @async begin
-                ccall((:mbedtls_ssl_config_free, libmbedtls),
-                      Cvoid, (Ptr{Cvoid},), data)
-                Libc.free(data)
-            end
-        end, conf)
+        finalizer(release!, conf)
         conf
     end
+end
+
+function release!(conf::SSLConfig)
+    if Threads.atomic_sub!(conf.refs, 1) == 1
+        ccall((:mbedtls_ssl_config_free, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
+        Libc.free(conf.data)
+    end
+    return
 end
 
 Base.show(io::IO, c::SSLConfig) = print(io, "MbedTLS.SSLConfig()")
@@ -50,11 +55,11 @@ mutable struct SSLContext <: IO
         ctx.close_notify_sent = false
         ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(x->begin
-            data = x.data
             @async begin
                 ccall((:mbedtls_ssl_free, libmbedtls),
-                      Cvoid, (Ptr{Cvoid},), ctx.data)
-                Libc.free(ctx.data)
+                      Cvoid, (Ptr{Cvoid},), x.data)
+                Libc.free(x.data)
+                isdefined(x, :config) && release!(x.config)
             end
         end, ctx)
         ctx
@@ -536,6 +541,7 @@ function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
 end
 
 function setup!(ctx::SSLContext, conf::SSLConfig)
+    Threads.atomic_add!(conf.refs, 1)
     ctx.config = conf
     ssl_setup(ctx, conf)
 end
@@ -553,7 +559,9 @@ end
 
 function dbg!(conf::SSLConfig, f)
     conf.dbg = f
-    dbg!(conf, c_dbg[], f)
+    # Pass the stored object: mbedtls keeps this pointer, and passing `f` directly can hand
+    # it a temporary box (for a closure, say) that nothing keeps alive.
+    dbg!(conf, c_dbg[], conf.dbg)
     nothing
 end
 
