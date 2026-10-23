@@ -1,9 +1,13 @@
 mutable struct Entropy
     data::Ptr{Cvoid}
     sources::Vector{Any}
+    # MbedTLS_jll is built without `MBEDTLS_THREADING_C`, so the C context has no mutex, and
+    # every `CtrDrbg` seeded from this `Entropy` draws from it when it seeds and reseeds.
+    lock::ReentrantLock
 
     function Entropy()
         ctx = new()
+        ctx.lock = ReentrantLock()
         ctx.data = Libc.malloc(100000)  # Exact byte count is 75088; playing it safe with some buffer
         ctx.sources = Any[]
         ccall((:mbedtls_entropy_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
@@ -39,12 +43,18 @@ function __entropyinit__()
     c_entropy[] = @cfunction(jl_entropy, Cint, (Any, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}))
 end
 
+# The entropy function `mbedtls_ctr_drbg_seed` is given: `mbedtls_entropy_func`, under the lock.
+function f_entropy(ctx::Entropy, buf::Ptr{UInt8}, len::Csize_t)
+    Base.@lock ctx.lock ccall((:mbedtls_entropy_func, libmbedcrypto), Cint,
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t), ctx.data, buf, len)
+end
+
 function gather(ctx::Entropy)
-    @err_check ccall((:mbedtls_entropy_gather, libmbedcrypto), Cint,
+    Base.@lock ctx.lock @err_check ccall((:mbedtls_entropy_gather, libmbedcrypto), Cint,
       (Ptr{Cvoid},), ctx.data)
 end
 
 function update_manual(ctx::Entropy, data::Vector{UInt8})
-    @err_check ccall((:mbedtls_entropy_update_manual, libmbedcrypto), Cint,
+    Base.@lock ctx.lock @err_check ccall((:mbedtls_entropy_update_manual, libmbedcrypto), Cint,
       (Ptr{Cvoid}, Ptr{UInt8}, Csize_t), ctx.data, data, length(data))
 end

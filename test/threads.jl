@@ -16,6 +16,18 @@ using Test, MbedTLS, Random, Sockets
     all_draws = reduce(vcat, draws)
     @test length(unique(all_draws)) == length(all_draws)
 
+    # Generators seeded at once from one `Entropy` on several threads get different seeds.
+    entropy = MbedTLS.Entropy()
+    firsts = [Vector{Vector{UInt8}}() for _ in 1:Threads.nthreads()]
+    @sync for t in 1:Threads.nthreads()
+        Threads.@spawn for _ in 1:5000
+            r = MbedTLS.CtrDrbg()
+            MbedTLS.seed!(r, entropy)
+            push!(firsts[t], rand(r, 32))
+        end
+    end
+    @test allunique(reduce(vcat, firsts))
+
     # Handshakes on several threads share the server config's RSA key.
     certfile = joinpath(@__DIR__, "clntsrvr", "test.cert")
     keyfile = joinpath(@__DIR__, "clntsrvr", "test.key")
