@@ -125,11 +125,10 @@ end
 
 Construct a custom cipher info object.
 
-- `id`: A CipherID, such as CIPHER_AES of CIPHER_BLOWFIHS
+- `id`: A CipherID, such as CIPHER_AES or CIPHER_BLOWFISH
 - `key_bitlength`: The bit length of the secret key. Available options depend
 on the specific cipher id.
-- `mode`: Either `Encrypt` or `Decrypt` to indicate which cipher operation will
-be performed with this cipher info.
+- `mode`: A CipherMode, such as CIPHER_MODE_CBC or CIPHER_MODE_GCM.
 """
 function CipherInfo(id::CipherID, key_bitlen, mode::CipherMode)
     ptr = ccall((:mbedtls_cipher_info_from_values, libmbedcrypto), Ptr{Cvoid},
@@ -156,7 +155,7 @@ function CipherInfo(id::CipherID)
         CIPHER_ARC4 => CIPHER_ARC4_128
     )
     if haskey(canonical_map, id)
-        canonical_map[id]
+        CipherInfo(canonical_map[id])
     else
         error("No default cipher found for $id. Use the three-argument constructor
               of CipherInfo to explicitly create a cipher info object.")
@@ -230,8 +229,8 @@ function update!(cipher::Cipher, buf_in, buf_out)
     buf_in_b = tobytes(buf_in)
     out_ref = Ref{Csize_t}(sizeof(buf_out))
     @err_check ccall((:mbedtls_cipher_update, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Ptr{Csize_t}),
-        cipher.data, buf_in, sizeof(buf_in), buf_out, out_ref)
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ptr{Csize_t}),
+        cipher.data, buf_in_b, sizeof(buf_in_b), buf_out, out_ref)
     Int(out_ref[])
 end
 
@@ -245,7 +244,7 @@ end
 
 function process_iv(iv, cipher)
     if isempty(iv)
-        process_iv(nothing)
+        process_iv(nothing, cipher)
     else
         iv_b = tobytes(iv)
         iv_b, sizeof(iv_b)
@@ -269,12 +268,12 @@ function crypt!(cipher::Cipher, iv, buf_in, buf_out)
     Int(olen_ref[])
 end
 
-crypt!(cipher::Cipher, buf_in, buf_out) = crypt!(cipher, C_NULL, buf_in, buf_out)
+crypt!(cipher::Cipher, buf_in, buf_out) = crypt!(cipher, nothing, buf_in, buf_out)
 
 function crypt(cipher_info, op::Operation, key, iv, msg)
     max_block_size = 256  # todo: obtain this dynamically from mbedtls
     buf = tobytes(msg)
-    cipher = Cipher(cipher_info)
+    cipher = cipher_info isa Cipher ? cipher_info : Cipher(cipher_info)
     set_key!(cipher, key, op)
     buf_out = Vector{UInt8}(undef, sizeof(buf) + max_block_size)
     olen = crypt!(cipher, iv, buf, buf_out)
