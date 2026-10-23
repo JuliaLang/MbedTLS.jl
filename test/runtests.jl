@@ -199,12 +199,14 @@ let
 
     let rsa = MbedTLS.RSA(key)
         MbedTLS.complete!(rsa)
+        @test MbedTLS.mpi_export(rsa.E) == [0x01, 0x00, 0x01]
+        @test MbedTLS.mpi_export(rsa.N) == hex2bytes(string(keyPEMN, base=16))
         buf = IOBuffer()
-        MbedTLS.mpi_export!(buf, rsa.E)
-        MbedTLS.mpi_export!(buf, rsa.N)
-        arr = take!(buf)
-        @test sizeof(arr) == 259
+        @test MbedTLS.mpi_export!(buf, rsa.E) == 3
+        @test MbedTLS.mpi_export!(buf, rsa.N) == 256
+        @test take!(buf) == [0x01; 0x00; 0x01; MbedTLS.mpi_export(rsa.N)]
     end
+    @test_throws ArgumentError MbedTLS.RSA(MbedTLS.PKContext())
 
     pubkey = MbedTLS.parse_public_keyfile(joinpath(@__DIR__, "public_key.pem"))
     @test MbedTLS.bitlength(pubkey) == 2048

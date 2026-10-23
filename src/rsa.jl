@@ -76,29 +76,26 @@ function mpi_import!(mpi::Union{Ptr{mbedtls_mpi}, MPI}, b::BigInt)
         mpi, data, nbytes)
 end
 
-function mpi_export!(vec::Union{Vector{UInt8}, SubArray{1, UInt8, Vector{UInt8}}}, mpi::Union{Ptr{mbedtls_mpi}, MPI})
+"""
+    mpi_export(mpi) -> Vector{UInt8}
+
+Return the big-endian bytes of `mpi`, without leading zeros.
+"""
+function mpi_export(mpi::Union{Ptr{mbedtls_mpi}, MPI})
+    buf = Vector{UInt8}(undef, mpi_size(mpi))
     @err_check ccall((:mbedtls_mpi_write_binary, libmbedcrypto), Cint,
         (Ptr{mbedtls_mpi}, Ptr{UInt8}, Csize_t),
-        mpi, data, sizeof(vec))
-    return nothing
+        mpi, buf, sizeof(buf))
+    return buf
 end
 
-function mpi_export!(to::IOBuffer, mpi::Union{Ptr{mbedtls_mpi}, MPI})
-    sz = mpi_size(mpi)
-    Base.ensureroom(to, sz)
-    ptr = (to.append ? to.size+1 : to.ptr)
-    @GC.preserve to begin
-        @err_check ccall((:mbedtls_mpi_write_binary, libmbedcrypto), Cint,
-            (Ptr{mbedtls_mpi}, Ptr{UInt8}, Csize_t),
-            mpi, pointer(to.data, ptr), sz)
-        ptr += sz
-    end
-    to.size = max(to.size, ptr - 1)
-    if !to.append
-        to.ptr += sz
-    end
-    return sz
-end
+"""
+    mpi_export!(io::IO, mpi) -> Int
+
+Write the big-endian bytes of `mpi`, without leading zeros, to `io`, and return the number
+of bytes written.
+"""
+mpi_export!(io::IO, mpi::Union{Ptr{mbedtls_mpi}, MPI}) = write(io, mpi_export(mpi))
 
 function mpi_size(mpi::Union{Ptr{mbedtls_mpi}, MPI})
     ccall((:mbedtls_mpi_size, libmbedcrypto), Csize_t, (Ptr{mbedtls_mpi},), mpi)

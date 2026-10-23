@@ -71,7 +71,7 @@ function parse_key!(ctx::PKContext, key, maybe_pw = nothing)
     end
     @err_check ccall((:mbedtls_pk_parse_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cuchar}, Csize_t, Ptr{Cuchar}, Csize_t),
-        ctx.data, key_bs, sizeof(key_bs) + 1, pw, pw_size)
+        ctx, key_bs, sizeof(key_bs) + 1, pw, pw_size)
 end
 
 function bitlength(ctx::PKContext)
@@ -124,7 +124,7 @@ end
 function verify(ctx::PKContext, hash_alg::MDKind, hash, signature)
     @err_check ccall((:mbedtls_pk_verify, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t),
-        ctx.data, hash_alg, hash, sizeof(hash), signature, sizeof(signature))
+        ctx, hash_alg, hash, sizeof(hash), signature, sizeof(signature))
 end
 
 function get_name(ctx::PKContext)
@@ -136,9 +136,13 @@ function get_type(ctx::PKContext)
     ccall((:mbedtls_pk_get_type, libmbedcrypto), PKType, (Ptr{Cvoid},), ctx)
 end
 
-# Access as RSA key
+"""
+    RSA(pk::PKContext)
+
+The RSA key inside `pk`. It shares memory with `pk`, and keeps `pk` alive.
+"""
 function RSA(pk::PKContext)
-    @assert get_type(pk) == PK_RSA
+    get_type(pk) == PK_RSA || throw(ArgumentError("`pk` holds a $(get_type(pk)) key, not an RSA key"))
     # We would like to do the following, but unfortunately, it's static_inline
     # in the headers.
     # ptr = ccall((:mbedtls_pk_rsa, libmbedcrypto), Ptr{mbedtls_rsa_context},
