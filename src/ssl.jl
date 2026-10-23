@@ -507,6 +507,18 @@ function Base.read(ctx::SSLContext, ::Type{UInt8})
     return b[]
 end
 
+# Base's `read(::IO, Char)` needs `peek`, which an `SSLContext` can't do, so read the
+# continuation bytes that a UTF-8 lead byte announces.
+function Base.read(ctx::SSLContext, ::Type{Char})
+    b0 = read(ctx, UInt8)
+    l = leading_ones(b0)
+    c = UInt32(b0) << 24
+    for i in 1:(2 <= l <= 4 ? l - 1 : 0)
+        c |= UInt32(read(ctx, UInt8)) << (24 - 8i)
+    end
+    return reinterpret(Char, c)
+end
+
 
 # Base ::IO Read Methods -- wrappers for `ssl_unsafe_read`
 

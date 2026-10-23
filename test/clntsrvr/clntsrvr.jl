@@ -264,6 +264,16 @@ end
     @test !isopen(clntconn.bio)
 end
 
+@testset "read Char" begin
+    clntconn, srvrconn = tlspair()
+    write(srvrconn, "é!€x")
+    @test read(clntconn, Char) == 'é'
+    @test read(clntconn, Char) == '!'
+    @test readuntil(clntconn, 'x') == "€"
+    close(clntconn)
+    close(srvrconn)
+end
+
 @testset "own_cert! twice" begin
     certfile = joinpath(@__DIR__, "test.cert")
     keyfile = joinpath(@__DIR__, "test.key")

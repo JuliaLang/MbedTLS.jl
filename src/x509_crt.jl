@@ -13,17 +13,22 @@ mutable struct CRT
     end
 end
 
-show(io::IO, crt::CRT) = print(io, crt_info(crt))
+show(io::IO, crt::CRT) = print(io, has_cert(crt) ? crt_info(crt) : "MbedTLS.CRT()")
+
+# Whether `crt` holds a certificate. mbedtls can't describe an empty `CRT`: it fails with
+# "buffer too small" about one of its own fixed-size buffers.
+has_cert(crt::CRT) = unsafe_load(Ptr{X509CrtHead}(crt.data)).raw.len != 0
 
 function crt_info(crt::CRT)
+    has_cert(crt) || throw(ArgumentError("`crt` holds no certificate"))
     n = 1000
     while true
         buf = Base.StringVector(n)
         ret = ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
             (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
             buf, length(buf), "", crt.data)
-        # mbedtls also returns this when its own fixed buffers are too small (for a `CRT`
-        # with no certificate, say), so stop growing at a size no real certificate needs.
+        # Stop growing well past any real certificate's description, in case mbedtls means
+        # one of its own fixed-size buffers.
         if ret == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL && n < 1 << 24
             n *= 2
             continue
