@@ -331,6 +331,54 @@ end
     end
 end
 
+@testset "write during a renegotiation, with data in flight" begin
+    srvrconfig = MbedTLS.SSLConfig(joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+    clntconfig = MbedTLS.SSLConfig(false)
+    for conf in (srvrconfig, clntconfig)
+        MbedTLS.ssl_conf_renegotiation!(conf, MbedTLS.MBEDTLS_SSL_RENEGOTIATION_ENABLED)
+    end
+    (port, server) = listenany(8000)
+    t = @async begin
+        s = MbedTLS.SSLContext()
+        MbedTLS.setup!(s, srvrconfig)
+        MbedTLS.associate!(s, accept(server))
+        MbedTLS.handshake!(s)
+        s
+    end
+    clntconn = sslconnect("127.0.0.1", port, clntconfig)
+    srvrconn = fetch(t)
+    close(server)
+    # The server asks to renegotiate and keeps sending data.
+    @test MbedTLS.@lockdata(srvrconn, ccall((:mbedtls_ssl_renegotiate, MbedTLS.libmbedtls),
+                                            Cint, (Ptr{Cvoid},), srvrconn.data)) == 0
+    MbedTLS.flush_pending(srvrconn)
+    write(srvrconn, "A")
+    write(srvrconn, "B")
+    sleep(0.2)
+    # The client's reader takes "A" and pauses, so the writer meets "B" while it waits for
+    # the server's reply to its ClientHello.
+    go = Channel{Nothing}(1)
+    reader = @async begin
+        a = String(read(clntconn, 1))
+        take!(go)
+        a * String(read(clntconn, 2))
+    end
+    sleep(0.2)
+    writer = @async write(clntconn, "ping")
+    sleep(0.3)
+    put!(go, nothing)
+    srvr = @async (String(read(srvrconn, 4)), write(srvrconn, "C"))
+    done = timedwait(() -> istaskdone(writer) && istaskdone(reader) && istaskdone(srvr), 10.0)
+    @test done === :ok
+    if done === :ok
+        @test fetch(writer) == 4
+        @test fetch(reader) == "ABC"
+        @test fetch(srvr) == ("ping", 1)
+    end
+    close(clntconn)
+    close(srvrconn)
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),

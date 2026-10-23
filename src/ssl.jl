@@ -253,11 +253,19 @@ function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
     nwritten = 0                                                                ;@🤖 "ssl_write ➡️  $nbytes"
     while nwritten < nbytes
         n = ssl_write(ctx, buf + nwritten, nbytes - nwritten)
-        if n == MBEDTLS_ERR_SSL_WANT_READ && renegotiation_lock(ctx) !== nothing ;@💀 "ssl_write ⌛️"
+        if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WAITING_SERVER_HELLO_RENEGO) &&
+           renegotiation_lock(ctx) !== nothing                                  ;@💀 "ssl_write ⌛️"
             # The peer is renegotiating: `ssl_write` ran handshake steps and needs the peer's
             # reply. A task waiting in `eof(ctx)` reads and processes it, so just retry;
             # with no such task, wait for the reply here.
-            if trylock(ctx.waitlock)
+            if n == MBEDTLS_ERR_SSL_WAITING_SERVER_HELLO_RENEGO
+                # Application data came before the reply; mbedtls holds it for the next read,
+                # and each `ssl_write` meanwhile counts it against `renego_max_records`.
+                # Wait until a reader has taken it.
+                while ssl_check_pending(ctx) && isopen(ctx.bio)
+                    sleep(0.001)
+                end
+            elseif trylock(ctx.waitlock)
                 try
                     eof(ctx.bio)
                 finally
