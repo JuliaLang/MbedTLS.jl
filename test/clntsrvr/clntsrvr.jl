@@ -288,6 +288,49 @@ end
     close(clntconn)
 end
 
+@testset "write during a renegotiation" begin
+    srvrconfig = MbedTLS.SSLConfig(joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+    clntconfig = MbedTLS.SSLConfig(false)
+    for conf in (srvrconfig, clntconfig)
+        MbedTLS.ssl_conf_renegotiation!(conf, MbedTLS.MBEDTLS_SSL_RENEGOTIATION_ENABLED)
+    end
+    # With a reader task waiting, it processes the server's reply; without one, the
+    # writer does.
+    for with_reader in (true, false)
+        (port, server) = listenany(8000)
+        t = @async begin
+            s = MbedTLS.SSLContext()
+            MbedTLS.setup!(s, srvrconfig)
+            MbedTLS.associate!(s, accept(server))
+            MbedTLS.handshake!(s)
+            s
+        end
+        clntconn = sslconnect("127.0.0.1", port, clntconfig)
+        srvrconn = fetch(t)
+        close(server)
+        reader = with_reader ? @async(String(read(clntconn, 5))) : nothing
+        # The server asks to renegotiate; the client answers with a ClientHello and must
+        # then wait for the server's reply before it can write.
+        @test MbedTLS.@lockdata(srvrconn, ccall((:mbedtls_ssl_renegotiate, MbedTLS.libmbedtls),
+                                                Cint, (Ptr{Cvoid},), srvrconn.data)) == 0
+        MbedTLS.flush_pending(srvrconn)
+        sleep(0.2)
+        if !with_reader
+            eof(clntconn.bio)
+            @test isreadable(clntconn)  # processes the request, sending the ClientHello
+        end
+        writer = @async write(clntconn, "ping")
+        sleep(0.2)
+        srvr = @async (String(read(srvrconn, 4)), write(srvrconn, "hello"))
+        @test timedwait(() -> istaskdone(srvr) && istaskdone(writer), 10.0) === :ok
+        @test fetch(writer) == 4
+        @test fetch(srvr) == ("ping", 5)
+        @test (with_reader ? fetch(reader) : String(read(clntconn, 5))) == "hello"
+        close(clntconn)
+        close(srvrconn)
+    end
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),
