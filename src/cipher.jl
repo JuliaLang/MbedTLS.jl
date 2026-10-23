@@ -68,7 +68,9 @@
     CIPHER_MODE_CTR,
     CIPHER_MODE_GCM,
     CIPHER_MODE_STREAM,
-    CIPHER_MODE_CCM)
+    CIPHER_MODE_CCM,
+    CIPHER_MODE_XTS,
+    CIPHER_MODE_CHACHAPOLY)
 
 @enum(Padding,
     PADDING_PKCS7 = 0,
@@ -287,6 +289,11 @@ function process_iv(iv::Nothing, cipher)
 end
 
 function crypt!(cipher::Cipher, iv, buf_in, buf_out)
+    # `mbedtls_cipher_crypt` neither writes nor checks an authentication tag, so these modes
+    # would silently give unauthenticated encryption.
+    info = cipher_info_head(cipher)
+    info !== nothing && info.mode in Cint.((CIPHER_MODE_GCM, CIPHER_MODE_CCM, CIPHER_MODE_CHACHAPOLY)) &&
+        throw(ArgumentError("authenticated modes (GCM, CCM, ChaCha20-Poly1305) are not supported: the tag would be skipped"))
     olen_ref = Ref{Csize_t}(sizeof(buf_out))
     iv_b, iv_size = process_iv(iv, cipher)
     buf_in_b = tobytes(buf_in)
@@ -331,6 +338,9 @@ or be a `Vector{UInt8}`.
 cipher (eg, 16 bytes for AES). By default, it will be set to all zeros, which
 is not secure. For security reasons, it should be set to a different value for each
 encryption operation.
+
+Authenticated modes (GCM, CCM, ChaCha20-Poly1305) are not supported, and throw an
+`ArgumentError`: their authentication tag would be skipped.
 """
 encrypt(cipher, key, msg, iv=nothing) = crypt(cipher, ENCRYPT, key, iv, msg)
 
