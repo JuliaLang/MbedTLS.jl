@@ -41,6 +41,7 @@ function testclntsrvr(certfile, keyfile)
     r = @async begin
         srvrconn = sslaccept(server, certfile, keyfile)
         close(server)
+        @test readline(srvrconn) == "hello"
         inbuff = read(srvrconn, 100)
         @test inbuff == outbuff
         put!(trigger, true)
@@ -53,6 +54,9 @@ function testclntsrvr(certfile, keyfile)
 
     @info("connecting to port $port")
     clntconn = sslconnect("127.0.0.1", port)
+    @test MbedTLS.alpn_proto(clntconn) === nothing
+    @test sprint(show, MbedTLS.get_peer_cert(clntconn)) == sprint(show, MbedTLS.crt_parse_file(certfile))
+    @test write(clntconn, "hello\n") == 6
     @test write(clntconn, outbuff) == 100
     @test take!(trigger)
     outbuff .*= 2
@@ -114,6 +118,34 @@ end
     testclntsrvr(
         joinpath(@__DIR__, "test.cert"),
         joinpath(@__DIR__, "test.key"))
+end
+
+@testset "alpn" begin
+    certfile = joinpath(@__DIR__, "test.cert")
+    keyfile = joinpath(@__DIR__, "test.key")
+    srvrconfig = MbedTLS.SSLConfig(certfile, keyfile)
+    MbedTLS.set_alpn!(srvrconfig, ["http/1.1", "h2"])
+    clntconfig = MbedTLS.SSLConfig(false)
+    MbedTLS.set_alpn!(clntconfig, ["h2"])
+    # mbedtls keeps the protocol list that `set_alpn!` hands it; it must survive a GC.
+    GC.gc()
+    garbage = [zeros(UInt8, 16) for _ in 1:100_000]
+    GC.gc()
+    (port, server) = listenany(8000)
+    r = @async begin
+        srvrconn = MbedTLS.SSLContext()
+        MbedTLS.setup!(srvrconn, srvrconfig)
+        MbedTLS.associate!(srvrconn, accept(server))
+        MbedTLS.handshake!(srvrconn)
+        srvrconn
+    end
+    clntconn = sslconnect("127.0.0.1", port, clntconfig)
+    srvrconn = fetch(r)
+    @test MbedTLS.alpn_proto(clntconn) == "h2"
+    @test MbedTLS.alpn_proto(srvrconn) == "h2"
+    close(clntconn)
+    close(srvrconn)
+    close(server)
 end
 
 @testset "testverify" begin

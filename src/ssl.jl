@@ -426,6 +426,12 @@ Base.unsafe_write(ctx::SSLContext, msg::Ptr{UInt8}, N::UInt) =
 
 Base.write(ctx::SSLContext, msg::UInt8) = write(ctx, Ref(msg))
 
+function Base.read(ctx::SSLContext, ::Type{UInt8})
+    b = Ref{UInt8}()
+    unsafe_read(ctx, b, 1)
+    return b[]
+end
+
 
 # Base ::IO Read Methods -- wrappers for `ssl_unsafe_read`
 
@@ -582,16 +588,23 @@ function set_dbg_level(level)
 end
 
 function set_alpn!(conf::SSLConfig, protos)
-    conf.alpn_protos = protos
+    # mbedtls keeps the NULL-terminated array of string pointers that `cconvert` builds,
+    # so `conf` must keep that array alive, not just `protos`.
+    conf.alpn_protos = Base.cconvert(Ptr{Ptr{Cchar}}, protos)
     @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, libmbedtls), Cint,
-                     (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, protos)
+                     (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, conf.alpn_protos)
     nothing
 end
 
+"""
+    alpn_proto(ctx::SSLContext)
+
+The protocol negotiated with ALPN, or `nothing` if none was.
+"""
 function alpn_proto(ctx::SSLContext)
     rv = ccall((:mbedtls_ssl_get_alpn_protocol, libmbedtls), Ptr{Cchar},
                (Ptr{Cvoid},), ctx.data)
-    unsafe_string(rv)
+    rv == C_NULL ? nothing : unsafe_string(rv)
 end
 
 
@@ -609,9 +622,20 @@ macro lockdata(ctx, expr)
     end)
 end
 
+"""
+    get_peer_cert(ctx::SSLContext)
+
+A copy of the peer's certificate, or `nothing` if the peer sent none.
+"""
 function get_peer_cert(ctx::SSLContext)
     data = ccall((:mbedtls_ssl_get_peer_cert, libmbedtls), Ptr{Cvoid}, (Ptr{Cvoid},), ctx.data)
-    return CRT(data)
+    data == C_NULL && return nothing
+    raw = unsafe_load(Ptr{X509CrtHead}(data)).raw
+    crt = CRT()
+    @err_check ccall((:mbedtls_x509_crt_parse_der, libmbedx509), Cint,
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+        crt.data, raw.p, raw.len)
+    return crt
 end
 
 function get_version(ctx::SSLContext)
