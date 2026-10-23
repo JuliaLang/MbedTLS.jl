@@ -181,13 +181,15 @@ be used. See `?CipherInfo` for more details.
 Cipher(info::Union{CipherID, CipherKind}) = Cipher(CipherInfo(info))
 
 function Base.show(io::IO, cipher::Cipher)
-    print(io, "Cipher($(cipher.data)")
+    print(io, "Cipher($(cipher.data))")
 end
 
+# `mbedtls_cipher_get_key_bitlen` is a static inline function, so read the field it
+# returns: `ctx->cipher_info->key_bitlen`, after the `type` and `mode` enums.
 function get_key_bitlen(cipher::Cipher)
-    ret = ccall((:mbedtls_cipher_get_key_bitlen, libmbedcrypto), Cint,
-        (Ptr{Cvoid},), cipher.data)
-    Int(ret)
+    info = unsafe_load(Ptr{Ptr{Cuint}}(cipher.data))
+    info == C_NULL && return 0
+    Int(unsafe_load(info, 3))
 end
 
 tobytes(x::Vector{UInt8}) = x
