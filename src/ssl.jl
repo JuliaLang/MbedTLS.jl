@@ -483,11 +483,19 @@ end
 """
     readavailable(ctx::SSLContext)
 
-Read available decrypted data from `ctx`,
-but don't wait for more data to arrive.
+Read the decrypted data already available in `ctx`, up to `MBEDTLS_SSL_MAX_CONTENT_LEN`
+bytes.
 
-The amount of decrypted data that can be read at once is limited by
-`MBEDTLS_SSL_MAX_CONTENT_LEN`.
+Unlike `readavailable` on a socket, this doesn't read from the underlying connection, so
+it returns an empty vector until something waits for data. Call `eof(ctx)` first; it
+blocks until data arrives or the connection ends:
+
+```julia
+while !eof(ctx)
+    data = readavailable(ctx)
+    # ...
+end
+```
 """
 function Base.readavailable(ctx::SSLContext)
     n = UInt(MBEDTLS_SSL_MAX_CONTENT_LEN)
