@@ -116,6 +116,35 @@ end
         joinpath(@__DIR__, "test.key"))
 end
 
+# Any `IO` can carry TLS, not just a `LibuvStream`.
+mutable struct ForwardingIO <: IO
+    io::TCPSocket
+end
+for f in (:isopen, :isreadable, :eof, :bytesavailable, :close)
+    @eval Base.$f(x::ForwardingIO) = $f(x.io)
+end
+Base.unsafe_read(x::ForwardingIO, p::Ptr{UInt8}, n::UInt) = unsafe_read(x.io, p, n)
+Base.unsafe_write(x::ForwardingIO, p::Ptr{UInt8}, n::UInt) = unsafe_write(x.io, p, n)
+
+@testset "custom bio" begin
+    (port, server) = listenany(8000)
+    r = @async begin
+        srvrconn = sslaccept(server, joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+        close(server)
+        msg = read(srvrconn, 5)
+        write(srvrconn, msg)
+        close(srvrconn)
+    end
+    clntconn = MbedTLS.SSLContext()
+    MbedTLS.setup!(clntconn, MbedTLS.SSLConfig(false))
+    MbedTLS.set_bio!(clntconn, ForwardingIO(connect("127.0.0.1", port)))
+    MbedTLS.handshake!(clntconn)
+    write(clntconn, "hello")
+    @test String(read(clntconn, 5)) == "hello"
+    close(clntconn)
+    wait(r)
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),

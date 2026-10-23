@@ -255,9 +255,8 @@ end
 """
 Copy `nbytes` of encrypted data from `buf` to the underlying `bio` connection.
 """
-function f_send(c_bio, buf, nbytes)                                             ;@🤖 "f_send ➡️  $nbytes"
-    bio = unsafe_pointer_to_objref(c_bio)::SSLContext
-    if !isopen(bio) || bio.status == Base.StatusClosing
+function f_send(bio::IO, buf::Ptr{UInt8}, nbytes::Csize_t)                       ;@🤖 "f_send ➡️  $nbytes"
+    if !isopen(bio) || (bio isa Base.LibuvStream && bio.status == Base.StatusClosing)
         return Cint(MBEDTLS_ERR_NET_CONN_RESET)
     end
     try
@@ -266,17 +265,6 @@ function f_send(c_bio, buf, nbytes)                                             
         ex isa Base.IOError && return Cint(MBEDTLS_ERR_NET_SEND_FAILED)
         rethrow() # this may corrupt memory, lead to undefined behavior, or (hopefully) just be badly fatal
     end
-end
-
-
-"""
-Connect `f_send` and `f_recv` callback functions to `SSLContext`.
-"""
-function set_bio!(ctx::SSLContext, bio::T) where {T<:IO}
-    isopen(bio) || throw(ArgumentError("`set_bio!` requires `isopen(bio)`"))
-    ctx.bio = bio
-    ssl_set_bio(ctx, pointer_from_objref(bio), c_send[], c_recv[])
-    nothing
 end
 
 
@@ -396,9 +384,8 @@ If no encrypted bytes are available return:
  - `MBEDTLS_ERR_SSL_CONN_EOF` if it is closed.
  - `MBEDTLS_ERR_NET_RECV_FAILED` if it is errored.
 """
-function f_recv(c_bio, buf, nbytes) # (Ptr{Cvoid}, Ptr{UInt8}, Csize_t)
+function f_recv(bio::IO, buf::Ptr{UInt8}, nbytes::Csize_t)
     @assert nbytes > 0
-    bio = unsafe_pointer_to_objref(c_bio)::SSLContext
     n = bytesavailable(bio)
     if n == 0
         # TODO: we should be able to forward this value directly from wait_for_encrypted_data
@@ -415,6 +402,20 @@ function f_recv(c_bio, buf, nbytes) # (Ptr{Cvoid}, Ptr{UInt8}, Csize_t)
     n = min(nbytes, n)                                                          ;@🤖 "f_recv ⬅️  $n"
     unsafe_read(bio, buf, n)
     return Cint(n)
+end
+
+
+"""
+Connect `f_send` and `f_recv` callback functions to `SSLContext`.
+"""
+function set_bio!(ctx::SSLContext, bio::T) where {T<:IO}
+    isopen(bio) || throw(ArgumentError("`set_bio!` requires `isopen(bio)`"))
+    ctx.bio = bio
+    # Callbacks specialized on `T` keep the calls on `bio` statically dispatched.
+    ssl_set_bio(ctx, pointer_from_objref(bio),
+                @cfunction(f_send, Cint, (Ref{T}, Ptr{UInt8}, Csize_t)),
+                @cfunction(f_recv, Cint, (Ref{T}, Ptr{UInt8}, Csize_t)))
+    nothing
 end
 
 
@@ -805,8 +806,6 @@ function hostname!(ctx::SSLContext, hostname)
       (Ptr{Cvoid}, Cstring), ctx.data, hostname)
 end
 
-const c_send = Ref{Ptr{Cvoid}}(C_NULL)
-const c_recv = Ref{Ptr{Cvoid}}(C_NULL)
 const c_dbg = Ref{Ptr{Cvoid}}(C_NULL)
 const c_verify = Ref{Ptr{Cvoid}}(C_NULL)
 const DEFAULT_CERT = Ref{String}()
@@ -888,8 +887,6 @@ function f_verify(p::Ptr{Cvoid}, crt::Ptr{Cvoid}, depth::Cint, flags::Ptr{UInt32
 end
 
 function __sslinit__()
-    c_send[] = @cfunction(f_send, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
-    c_recv[] = @cfunction(f_recv, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
     c_dbg[] = @cfunction(f_dbg, Cvoid, (Any, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
     c_verify[] = @cfunction(f_verify, Cint, (Ptr{Cvoid}, Ptr{Cvoid}, Cint, Ptr{UInt32}))
     # Note: `MozillaCACerts_jll.cacert` is filled by `__init__`
