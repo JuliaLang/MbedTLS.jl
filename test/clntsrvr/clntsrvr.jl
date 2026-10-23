@@ -177,6 +177,35 @@ Base.unsafe_write(x::ForwardingIO, p::Ptr{UInt8}, n::UInt) = unsafe_write(x.io, 
     wait(r)
 end
 
+@testset "read to end" begin
+    data = rand(UInt8, 50_000)
+    (port, server) = listenany(8000)
+    r = @async begin
+        srvrconn = sslaccept(server, joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+        close(server)
+        write(srvrconn, data)
+        close(srvrconn)
+    end
+    clntconn = sslconnect("127.0.0.1", port)
+    @test read(clntconn) == data
+    wait(r)
+    close(clntconn)
+
+    buf = UInt8[]
+    (port, server) = listenany(8000)
+    r = @async begin
+        srvrconn = sslaccept(server, joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+        close(server)
+        write(srvrconn, "hello")
+        close(srvrconn)
+    end
+    clntconn = sslconnect("127.0.0.1", port)
+    @test readbytes!(clntconn, buf, 100) == 5
+    @test buf[1:5] == b"hello"
+    wait(r)
+    close(clntconn)
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),

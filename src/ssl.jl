@@ -458,7 +458,7 @@ end
 """
     readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf); kw...)
 
-Copy at most `nbytes` of decrypted data from `ctx` into `buf`.
+Copy at most `nbytes` of decrypted data from `ctx` into `buf`, growing `buf` if needed.
 If `all=true`: wait for sufficient decrypted data to be available.
 Less than `nbytes` may be copied if the peer sends TLS `close_notify` or closes
 the connection.
@@ -469,15 +469,20 @@ Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf); kw...) 
 
 function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt;
                          all::Bool=true)
-    nbytes <= length(buf) || throw(ArgumentError("`buf` too small!"))
     nread = 0
-    GC.@preserve buf while nread < nbytes
-        nread += ssl_unsafe_read(ctx, pointer(buf) + nread, nbytes - nread)
+    while nread < nbytes
+        if nread == length(buf)
+            # `read(ctx)` asks for `typemax(Int)` bytes, so grow `buf` as data arrives.
+            eof(ctx) && break
+            resize!(buf, min(max(2 * length(buf), 1024), nbytes))
+        end
+        nread += GC.@preserve buf ssl_unsafe_read(ctx, pointer(buf) + nread,
+                                                  min(nbytes, length(buf)) - nread)
         if (nread == nbytes) || !all || eof(ctx)
             break
         end
     end                                                                         ;@😬 "readbytes! ⬅️  $nread"
-    return nread
+    return Int(nread)
 end
 
 """
