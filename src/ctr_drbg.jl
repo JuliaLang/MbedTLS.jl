@@ -12,9 +12,6 @@ mutable struct CtrDrbg  <: AbstractRNG
         end, ctx)
         ctx
     end
-
-
-    CrtDrbg(data) = new(data)
 end
 
 function f_rng(rng, c_buf, sz)
@@ -24,22 +21,45 @@ function f_rng(rng, c_buf, sz)
 end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
-    rng.entropy = entropy
     entropy_func = cglobal((:mbedtls_entropy_func, libmbedcrypto))
     @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         rng.data, entropy_func, entropy.data, pdata, sizeof(pdata))
+    # mbedtls keeps `entropy.data`; this also marks `rng` as seeded.
+    rng.entropy = entropy
     rng
 end
 
 seed!(rng::CtrDrbg, entropy) = seed!(rng, entropy, UInt8[])
 
-function Random.rand!(rng::CtrDrbg, buf::Array)
-    @err_check ccall((:mbedtls_ctr_drbg_random, libmbedcrypto), Cint,
-            (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-        rng.data, buf, sizeof(buf))
+# Fill `nbytes` bytes at `ptr`, at most `MBEDTLS_CTR_DRBG_MAX_REQUEST` bytes per call.
+function random!(rng::CtrDrbg, ptr::Ptr{UInt8}, nbytes::Integer)
+    # mbedtls crashes when it generates from a context that was never seeded.
+    isdefined(rng, :entropy) ||
+        throw(ArgumentError("a `CtrDrbg` must be seeded with `MbedTLS.seed!` before use"))
+    while nbytes > 0
+        n = min(nbytes, MBEDTLS_CTR_DRBG_MAX_REQUEST)
+        @err_check ccall((:mbedtls_ctr_drbg_random, libmbedcrypto), Cint,
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+            rng.data, ptr, n)
+        ptr += n
+        nbytes -= n
+    end
+end
+
+function Random.rand!(rng::CtrDrbg, buf::Array{<:Base.BitInteger})
+    GC.@preserve buf random!(rng, Ptr{UInt8}(pointer(buf)), sizeof(buf))
     buf
 end
+
+function Random.rand(rng::CtrDrbg, ::Random.SamplerType{T}) where {T<:Base.BitInteger}
+    x = Ref{T}()
+    GC.@preserve x random!(rng, Ptr{UInt8}(Base.unsafe_convert(Ptr{T}, x)), sizeof(T))
+    x[]
+end
+
+Random.rand(rng::CtrDrbg, ::Random.SamplerType{Bool}) = rand(rng, UInt8) % Bool
+Random.rng_native_52(::CtrDrbg) = UInt64
 
 function Random.rand(rng::CtrDrbg, size::Integer)
     buf = Vector{UInt8}(undef, size)
