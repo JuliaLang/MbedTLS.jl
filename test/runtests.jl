@@ -422,3 +422,7 @@ let
 end
 
 include("distrust.jl")
+
+# Races need several threads, and the suite may run with one.
+@test success(pipeline(`$(Base.julia_cmd()) --project=$(Base.active_project()) -t 4 $(joinpath(@__DIR__, "threads.jl"))`;
+                       stdout, stderr))
