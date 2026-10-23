@@ -85,6 +85,18 @@ let
     verify_key_pem("MbedTLS.jl", signature)
 end
 
+# CtrDrbg
+let rng = MbedTLS.CtrDrbg()
+    @test_throws ArgumentError rand(rng, 16)
+    MbedTLS.seed!(rng, MbedTLS.Entropy())
+    @test length(rand(rng, 5000)) == 5000
+    @test rand(rng, UInt64) isa UInt64
+    @test rand(rng, Bool) isa Bool
+    @test 0 <= rand(rng, Float64) < 1
+    @test rand(rng, 1:10) in 1:10
+    @test all(x -> 0 <= x < 1, rand!(rng, zeros(100)))
+end
+
 # Basic TLS client functionality
 let
     testhost = "httpbin.org"
