@@ -195,6 +195,11 @@ let rng = MbedTLS.CtrDrbg()
         rand(rng, UInt8)
     end
     @test rand(rng, UInt64) isa UInt64
+
+    # A failed reseed keeps the generator working.
+    @test_throws MethodError MbedTLS.seed!(rng, MbedTLS.Entropy(), "not bytes")
+    @test_throws MbedTLS.MbedException MbedTLS.seed!(rng, MbedTLS.Entropy(), zeros(UInt8, 400))
+    @test rand(rng, UInt64) isa UInt64
 end
 
 # Basic TLS client functionality
@@ -316,6 +321,11 @@ let
         @test take!(buf) == [0x01; 0x00; 0x01; MbedTLS.mpi_export(rsa.N)]
     end
     @test_throws ArgumentError MbedTLS.RSA(MbedTLS.PKContext())
+
+    # Parsing into a context that holds a key fails without freeing that key.
+    @test_throws ArgumentError MbedTLS.parse_key!(key, read(key_path))
+    @test_throws ArgumentError MbedTLS.parse_public_keyfile!(pubkey, pubkey_path)
+    @test MbedTLS.bitlength(key) == MbedTLS.bitlength(pubkey) == 2048
 
     for md in instances(MbedTLS.MDKind)
         if in(md, (MD_NONE, MD_MD2, MD_MD4))
@@ -498,6 +508,8 @@ let crt = MbedTLS.crt_parse_file(joinpath(@__DIR__, "many_sans.pem"))
     info = sprint(show, crt)
     @test length(info) > 1000
     @test occursin("host60.many-sans.test", info)
+    # A CRT with no certificate has no info; this fails rather than growing the buffer forever.
+    @test_throws MbedTLS.MbedException sprint(show, MbedTLS.CRT())
 end
 
 # Unit test for MBedTLS errorshow (#274)

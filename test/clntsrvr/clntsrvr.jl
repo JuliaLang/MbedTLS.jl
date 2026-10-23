@@ -151,6 +151,7 @@ end
     # list when it rejects a new one; both must survive a GC.
     set_alpn_copies!(srvrconfig, ("http/1.1",))
     @test_throws MbedTLS.MbedException MbedTLS.set_alpn!(clntconfig, [""])
+    @test_throws ArgumentError MbedTLS.set_alpn!(clntconfig, String[])
     for _ in 1:3
         garbage = [string("Z", i % 10) for i in 1:100_000]
         GC.gc()
@@ -285,6 +286,48 @@ end
     close(fetch(r))
     close(clntconn)
     close(server)
+end
+
+@testset "isreadable while another task waits in eof" begin
+    for renegotiation in (false, true)
+        srvrconfig = MbedTLS.SSLConfig(joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+        clntconfig = MbedTLS.SSLConfig(false)
+        renegotiation && MbedTLS.ssl_conf_renegotiation!(clntconfig, MbedTLS.MBEDTLS_SSL_RENEGOTIATION_ENABLED)
+        (port, server) = listenany(8000)
+        t = @async begin
+            s = MbedTLS.SSLContext()
+            MbedTLS.setup!(s, srvrconfig)
+            MbedTLS.associate!(s, accept(server))
+            MbedTLS.handshake!(s)
+            s
+        end
+        clntconn = sslconnect("127.0.0.1", port, clntconfig)
+        srvrconn = fetch(t)
+        close(server)
+        # One record, sent in two parts.
+        MbedTLS.@lockdata srvrconn ccall((:mbedtls_ssl_write, MbedTLS.libmbedtls), Cint,
+                                         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t), srvrconn.data, "hello", 5)
+        record = copy(srvrconn.sendbio.pending)
+        empty!(srvrconn.sendbio.pending)
+        reader = @async String(read(clntconn, 5))
+        sleep(0.2)
+        npolls = Ref(0)
+        poller = @async while !istaskdone(reader)
+            isreadable(clntconn)  # neither blocks nor takes the reader's record
+            npolls[] += 1
+            yield()
+        end
+        write(srvrconn.bio, record[1:3])
+        sleep(0.5)
+        n = npolls[]
+        sleep(0.5)
+        @test npolls[] > n
+        write(srvrconn.bio, record[4:end])
+        @test timedwait(() -> istaskdone(reader), 5.0) === :ok
+        @test istaskdone(reader) && fetch(reader) == "hello"
+        close(clntconn)
+        close(srvrconn)
+    end
 end
 
 @testset "read while a write is blocked" begin

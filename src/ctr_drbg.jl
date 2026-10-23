@@ -28,17 +28,23 @@ end
 
 function seed!(rng::CtrDrbg, entropy::Entropy, pdata)
     entropy_func = @cfunction(f_entropy, Cint, (Ref{Entropy}, Ptr{UInt8}, Csize_t))
-    Base.@lock rng.lock begin
-        # mbedtls seeds a context once: seeding again needs a fresh context, and a failed
-        # seeding leaves it unusable until seeded again.
-        rng.entropy = nothing
-        ccall((:mbedtls_ctr_drbg_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), rng.data)
-        ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), rng.data)
+    # mbedtls seeds a context once, so seed a fresh one and swap it in; if seeding fails,
+    # `rng` keeps the context it has.
+    data = Libc.malloc(1000)  # 344
+    ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), data)
+    try
         @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
             (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Csize_t),
-            rng.data, entropy_func, entropy, pdata, sizeof(pdata))
-        # mbedtls keeps `entropy` and reseeds from it.
-        rng.entropy = entropy
+            data, entropy_func, entropy, pdata, sizeof(pdata))
+        Base.@lock rng.lock begin
+            data, rng.data = rng.data, data
+            # mbedtls keeps `entropy` and reseeds from it.
+            rng.entropy = entropy
+        end
+    finally
+        # Free whichever context `rng` doesn't use.
+        ccall((:mbedtls_ctr_drbg_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), data)
+        Libc.free(data)
     end
     rng
 end

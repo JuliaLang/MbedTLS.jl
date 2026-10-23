@@ -153,9 +153,14 @@ True unless:
 function Base.isreadable(ctx::SSLContext)
     ctx.isreadable || return false
     # It's possible we received the shutdown, but didn't process it yet - if so,
-    # do that now.
-    if bytesavailable(ctx.bio) > 0 || ssl_check_pending(ctx)
-        ssl_unsafe_read(ctx, Ptr{UInt8}(C_NULL), UInt(0))
+    # do that now. A task waiting in `eof(ctx)` holds `waitlock` and processes it instead:
+    # reading here would leave that task waiting for socket data this read consumed.
+    if (bytesavailable(ctx.bio) > 0 || ssl_check_pending(ctx)) && trylock(ctx.waitlock)
+        try
+            ssl_unsafe_read(ctx, Ptr{UInt8}(C_NULL), UInt(0))
+        finally
+            unlock(ctx.waitlock)
+        end
     end
     return ctx.isreadable
 end
@@ -364,7 +369,8 @@ end
     ssl_unsafe_read(::SSLContext, buf, nbytes)
 
 Copies at most `nbytes` of decrypted data into `buf`.
-Never blocks to wait for more data to arrive.
+Never waits for more data to arrive. (With renegotiation enabled, it may wait for another
+task's read or write on `ctx` to finish.)
 Returns number of bytes copied into `buf` (`<= nbytes`), which is 0 once
 `!isreadable(ctx)`.
 Updates `ctx.bytesavailable` with the number of decrypted bytes remaining in
@@ -692,6 +698,9 @@ function set_dbg_level(level)
 end
 
 function set_alpn!(conf::SSLConfig, protos)
+    # mbedtls accepts an empty list and then sends an empty ALPN extension, which RFC 7301
+    # forbids and servers reject.
+    isempty(protos) && throw(ArgumentError("`protos` must name at least one protocol"))
     # mbedtls keeps the NULL-terminated array of string pointers that `cconvert` builds, and
     # reads each name up to a NUL, which a `SubString` doesn't end with: copy to `String`s.
     list = Base.cconvert(Ptr{Ptr{Cchar}}, String[String(p) for p in protos])

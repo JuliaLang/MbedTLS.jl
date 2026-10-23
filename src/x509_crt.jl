@@ -22,7 +22,9 @@ function crt_info(crt::CRT)
         ret = ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
             (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
             buf, length(buf), "", crt.data)
-        if ret == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL
+        # mbedtls also returns this when its own fixed buffers are too small (for a `CRT`
+        # with no certificate, say), so stop growing at a size no real certificate needs.
+        if ret == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL && n < 1 << 24
             n *= 2
             continue
         end
