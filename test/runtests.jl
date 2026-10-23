@@ -68,13 +68,23 @@ function verify_key_pem(data, signature)
     pubkey = RSA(MbedTLS.MBEDTLS_RSA_PKCS_V15, MD_SHA1)
     @test_throws MbedTLS.MbedException MbedTLS.pubkey_from_vals!(pubkey, keyPEMN, keyPEMe)
     MbedTLS.pubkey_from_vals!(pubkey, keyPEMe, keyPEMN)
-    MbedTLS.verify(pubkey, MD_SHA1, MbedTLS.digest(MD_SHA1, data), signature)
+    hash = MbedTLS.digest(MD_SHA1, data)
+    # mbedtls reads the full hash and signature lengths, whatever is passed.
+    @test_throws ArgumentError MbedTLS.verify(pubkey, MD_SHA1, hash[1:4], signature)
+    @test_throws ArgumentError MbedTLS.verify(pubkey, MD_SHA1, hash, signature[1:16])
+    @test_throws ArgumentError MbedTLS.public(pubkey, signature[1:16], zeros(UInt8, 256))
+    MbedTLS.verify(pubkey, MD_SHA1, hash, signature)
 end
 
 # RSA
 let
     key = MbedTLS.gen_key(MersenneTwister(0))
     # todo: test encryption/decryption
+
+    # GMP exports no bytes for zero.
+    zero_key = RSA()
+    MbedTLS.mpi_import!(zero_key.N, big(0))
+    @test MbedTLS.mpi_export(zero_key.N) == UInt8[]
 
     # Test signature verification.
     # Pre-generated signature of "MbedTLS.jl" using key.pem
@@ -241,6 +251,41 @@ let
         signature = MbedTLS.sign(key, md, hash, MersenneTwister(0))
         @test MbedTLS.verify(pubkey, md, hash, signature) == 0
     end
+
+    # Hashes must have the digest's size, and outputs must fit the signature.
+    hash = MbedTLS.digest(MD_SHA256, "MbedTLS.jl")
+    @test_throws ArgumentError MbedTLS.sign(key, MD_SHA256, UInt8[], MersenneTwister(0))
+    @test_throws ArgumentError MbedTLS.verify(pubkey, MD_SHA256, hash[1:4], zeros(UInt8, 256))
+    @test_throws ArgumentError MbedTLS.sign!(key, MD_SHA256, hash, zeros(UInt8, 255), MersenneTwister(0))
+
+    # An ECDSA signature is longer than the key, and its length varies.
+    eckey = MbedTLS.parse_keyfile(joinpath(@__DIR__, "ec_key.pem"))
+    @test MbedTLS.get_type(eckey) == MbedTLS.PK_ECKEY
+    signature = MbedTLS.sign(eckey, MD_SHA256, hash, MersenneTwister(0))
+    @test 64 < length(signature) <= 72
+    @test MbedTLS.verify(eckey, MD_SHA256, hash, signature) == 0
+    @test_throws ArgumentError MbedTLS.sign!(eckey, MD_SHA256, hash, zeros(UInt8, 32), MersenneTwister(0))
+
+    # Encryption round trip
+    rng = MbedTLS.CtrDrbg()
+    MbedTLS.seed!(rng, MbedTLS.Entropy())
+    ciphertext = zeros(UInt8, 256)
+    n = MbedTLS.encrypt!(pubkey, b"MbedTLS.jl", ciphertext, rng)
+    @test n == 256
+    plaintext = zeros(UInt8, 256)
+    n = MbedTLS.decrypt!(key, ciphertext, plaintext, rng)
+    @test String(plaintext[1:n]) == "MbedTLS.jl"
+
+    # Parsing doesn't empty the caller's bytes.
+    bytes = read(key_path)
+    MbedTLS.parse_key(bytes)
+    @test bytes == read(key_path)
+    bytes = read(pubkey_path)
+    MbedTLS.parse_public_key(bytes)
+    @test bytes == read(pubkey_path)
+    bytes = read(joinpath(@__DIR__, "clntsrvr", "test.cert"))
+    MbedTLS.crt_parse(bytes)
+    @test bytes == read(joinpath(@__DIR__, "clntsrvr", "test.cert"))
 end
 
 # Test md.jl
@@ -321,6 +366,13 @@ let frees = Threads.Atomic{Int}(0), n = 200
     end
     MbedTLS.set_dbg_level(0)
     @test frees[] == n
+end
+
+# Certificate info longer than the initial 1000-byte buffer
+let crt = MbedTLS.crt_parse_file(joinpath(@__DIR__, "many_sans.pem"))
+    info = sprint(show, crt)
+    @test length(info) > 1000
+    @test occursin("host60.many-sans.test", info)
 end
 
 # Unit test for MBedTLS errorshow (#274)
