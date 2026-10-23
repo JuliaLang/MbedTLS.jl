@@ -254,6 +254,15 @@ let
     write(md, "msg")
     digest3 = MbedTLS.finish!(md)
     @test digest1 ≠ digest3
+
+    md = MbedTLS.MD(MD_SHA256)
+    @test write(md, "Mbed") == 4
+    md2 = copy(md)
+    @test write(md, UInt8['T', 'L', 'S', '.', 'j', 'l']) == 6
+    @test write(md2, "TLS.jl") == 6
+    @test MbedTLS.finish!(md) == MbedTLS.finish!(md2) == MbedTLS.digest(MD_SHA256, "MbedTLS.jl")
+    @test_throws ArgumentError copy(MbedTLS.MD(MD_SHA256, "passcode"))
+    @test_throws ErrorException MbedTLS.MDInfo("NOT-A-DIGEST")
 end
 
 # log_secrets
