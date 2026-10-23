@@ -1,9 +1,13 @@
 mutable struct CtrDrbg  <: AbstractRNG
     data::Ptr{Cvoid}
     entropy::Union{Cvoid, Entropy}
+    # MbedTLS_jll is built without `MBEDTLS_THREADING_C`, so the C context has no mutex, and
+    # every `SSLContext` set up with an `SSLConfig` draws from the config's generator.
+    lock::ReentrantLock
 
     function CtrDrbg()
         ctx = new()
+        ctx.lock = ReentrantLock()
         ctx.data = Libc.malloc(1000)  # 344
         ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(ctx->begin
@@ -22,7 +26,7 @@ end
 
 function seed!(rng::CtrDrbg, entropy, pdata)
     entropy_func = cglobal((:mbedtls_entropy_func, libmbedcrypto))
-    @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
+    Base.@lock rng.lock @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
         rng.data, entropy_func, entropy.data, pdata, sizeof(pdata))
     # mbedtls keeps `entropy.data`; this also marks `rng` as seeded.
@@ -37,7 +41,7 @@ function random!(rng::CtrDrbg, ptr::Ptr{UInt8}, nbytes::Integer)
     # mbedtls crashes when it generates from a context that was never seeded.
     isdefined(rng, :entropy) ||
         throw(ArgumentError("a `CtrDrbg` must be seeded with `MbedTLS.seed!` before use"))
-    while nbytes > 0
+    Base.@lock rng.lock while nbytes > 0
         n = min(nbytes, MBEDTLS_CTR_DRBG_MAX_REQUEST)
         @err_check ccall((:mbedtls_ctr_drbg_random, libmbedcrypto), Cint,
             (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),

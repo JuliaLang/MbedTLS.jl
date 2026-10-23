@@ -98,7 +98,7 @@ function testverify(certfile, keyfile, badcafile)
 
     @info("connecting to port $port")
     badsslconfig = MbedTLS.SSLConfig(true)
-    badsslconfig.chain = MbedTLS.crt_parse(read(badcafile, String))
+    MbedTLS.ca_chain!(badsslconfig, MbedTLS.crt_parse(read(badcafile, String)))
     try
         clntconn = sslconnect("127.0.0.1", port, badsslconfig)
     catch e
@@ -206,12 +206,75 @@ end
     close(clntconn)
 end
 
-@testset "read while a write is blocked" begin
+function tlspair()
     (port, server) = listenany(8000)
     r = @async sslaccept(server, joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
     clntconn = sslconnect("127.0.0.1", port)
     srvrconn = fetch(r)
     close(server)
+    return clntconn, srvrconn
+end
+
+@testset "end of stream" begin
+    # Reads after the end of the stream return nothing, as on a socket.
+    clntconn, srvrconn = tlspair()
+    write(srvrconn, "abc")
+    close(srvrconn)
+    @test read(clntconn, 5) == b"abc"
+    @test eof(clntconn)
+    @test readbytes!(clntconn, zeros(UInt8, 5)) == 0
+    @test readavailable(clntconn) == UInt8[]
+    @test read(clntconn, 5) == UInt8[]
+    close(clntconn)
+
+    # Empty application-data records in a row are not the end of the stream.
+    for nempty in 1:3
+        clntconn, srvrconn = tlspair()
+        for _ in 1:nempty
+            @test MbedTLS.ssl_write(srvrconn, Ptr{UInt8}(C_NULL), 0) == 0
+        end
+        write(srvrconn, "hello")
+        @test String(read(clntconn, 5)) == "hello"
+        close(clntconn)
+        close(srvrconn)
+    end
+
+    # `close` doesn't throw when the peer has reset the connection.
+    clntconn, srvrconn = tlspair()
+    write(clntconn, "request")
+    sleep(0.2)
+    close(srvrconn.bio)  # unread data makes this close send a reset
+    sleep(0.2)
+    @test close(clntconn) === nothing
+    @test !isopen(clntconn.bio)
+end
+
+@testset "own_cert! twice" begin
+    certfile = joinpath(@__DIR__, "test.cert")
+    keyfile = joinpath(@__DIR__, "test.key")
+    srvrconfig = MbedTLS.SSLConfig(certfile, keyfile)
+    first_freed = Ref(false)
+    finalizer(_ -> (first_freed[] = true), srvrconfig.cert)
+    MbedTLS.own_cert!(srvrconfig, MbedTLS.crt_parse_file(certfile), MbedTLS.parse_keyfile(keyfile))
+    # mbedtls keeps both pairs, so the first must survive a GC.
+    GC.gc(); GC.gc()
+    @test !first_freed[]
+    (port, server) = listenany(8000)
+    r = @async begin
+        srvrconn = MbedTLS.SSLContext()
+        MbedTLS.setup!(srvrconn, srvrconfig)
+        MbedTLS.associate!(srvrconn, accept(server))
+        MbedTLS.handshake!(srvrconn)
+        srvrconn
+    end
+    clntconn = sslconnect("127.0.0.1", port)
+    close(fetch(r))
+    close(clntconn)
+    close(server)
+end
+
+@testset "read while a write is blocked" begin
+    clntconn, srvrconn = tlspair()
     # The server replies without reading the upload, as an HTTP server does with an early
     # error response. The upload fills the socket buffers and blocks.
     write(srvrconn, "early reply")
