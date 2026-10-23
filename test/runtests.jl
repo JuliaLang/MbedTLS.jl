@@ -194,6 +194,17 @@ let
         @test MbedTLS.get_name(k) == "RSA"
     end
 
+    let rsa = MbedTLS.RSA(key)
+        MbedTLS.complete!(rsa)
+        @test MbedTLS.mpi_export(rsa.E) == [0x01, 0x00, 0x01]
+        @test MbedTLS.mpi_export(rsa.N) == hex2bytes(string(keyPEMN, base=16))
+        buf = IOBuffer()
+        @test MbedTLS.mpi_export!(buf, rsa.E) == 3
+        @test MbedTLS.mpi_export!(buf, rsa.N) == 256
+        @test take!(buf) == [0x01; 0x00; 0x01; MbedTLS.mpi_export(rsa.N)]
+    end
+    @test_throws ArgumentError MbedTLS.RSA(MbedTLS.PKContext())
+
     for md in instances(MbedTLS.MDKind)
         if in(md, (MD_NONE, MD_MD2, MD_MD4))
             continue
