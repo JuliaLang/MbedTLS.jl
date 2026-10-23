@@ -1,6 +1,7 @@
 mutable struct CtrDrbg  <: AbstractRNG
     data::Ptr{Cvoid}
-    entropy::Union{Cvoid, Entropy}
+    # The `Entropy` mbedtls reseeds from, or `nothing` until seeding succeeds.
+    entropy::Union{Nothing, Entropy}
     # MbedTLS_jll is built without `MBEDTLS_THREADING_C`, so the C context has no mutex, and
     # every `SSLContext` set up with an `SSLConfig` draws from the config's generator.
     lock::ReentrantLock
@@ -8,6 +9,7 @@ mutable struct CtrDrbg  <: AbstractRNG
     function CtrDrbg()
         ctx = new()
         ctx.lock = ReentrantLock()
+        ctx.entropy = nothing
         ctx.data = Libc.malloc(1000)  # 344
         ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(ctx->begin
@@ -26,11 +28,18 @@ end
 
 function seed!(rng::CtrDrbg, entropy::Entropy, pdata)
     entropy_func = @cfunction(f_entropy, Cint, (Ref{Entropy}, Ptr{UInt8}, Csize_t))
-    Base.@lock rng.lock @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Csize_t),
-        rng.data, entropy_func, entropy, pdata, sizeof(pdata))
-    # mbedtls keeps `entropy` and reseeds from it; this also marks `rng` as seeded.
-    rng.entropy = entropy
+    Base.@lock rng.lock begin
+        # mbedtls seeds a context once: seeding again needs a fresh context, and a failed
+        # seeding leaves it unusable until seeded again.
+        rng.entropy = nothing
+        ccall((:mbedtls_ctr_drbg_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), rng.data)
+        ccall((:mbedtls_ctr_drbg_init, libmbedcrypto), Cvoid, (Ptr{Cvoid},), rng.data)
+        @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Csize_t),
+            rng.data, entropy_func, entropy, pdata, sizeof(pdata))
+        # mbedtls keeps `entropy` and reseeds from it.
+        rng.entropy = entropy
+    end
     rng
 end
 
@@ -38,16 +47,18 @@ seed!(rng::CtrDrbg, entropy) = seed!(rng, entropy, UInt8[])
 
 # Fill `nbytes` bytes at `ptr`, at most `MBEDTLS_CTR_DRBG_MAX_REQUEST` bytes per call.
 function random!(rng::CtrDrbg, ptr::Ptr{UInt8}, nbytes::Integer)
-    # mbedtls crashes when it generates from a context that was never seeded.
-    isdefined(rng, :entropy) ||
-        throw(ArgumentError("a `CtrDrbg` must be seeded with `MbedTLS.seed!` before use"))
-    Base.@lock rng.lock while nbytes > 0
-        n = min(nbytes, MBEDTLS_CTR_DRBG_MAX_REQUEST)
-        @err_check ccall((:mbedtls_ctr_drbg_random, libmbedcrypto), Cint,
-            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
-            rng.data, ptr, n)
-        ptr += n
-        nbytes -= n
+    Base.@lock rng.lock begin
+        # mbedtls crashes when it generates from a context that was never seeded.
+        rng.entropy === nothing &&
+            throw(ArgumentError("a `CtrDrbg` must be seeded with `MbedTLS.seed!` before use"))
+        while nbytes > 0
+            n = min(nbytes, MBEDTLS_CTR_DRBG_MAX_REQUEST)
+            @err_check ccall((:mbedtls_ctr_drbg_random, libmbedcrypto), Cint,
+                (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+                rng.data, ptr, n)
+            ptr += n
+            nbytes -= n
+        end
     end
 end
 

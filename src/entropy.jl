@@ -20,27 +20,27 @@ mutable struct Entropy
 end
 
 function add_source!(ctx::Entropy, f_source::Ptr, f, threshold, strong)
-    ret = ccall((:mbedtls_entropy_add_source, libmbedcrypto), Cint,
-      (Ptr{Cvoid}, Ptr{Cvoid}, Any, Csize_t, Cint),
-      ctx.data, f_source, f, threshold, strong)
-    Int(ret)
-end
-
-function jl_entropy(f, output, len, olen)
-    output_jl = unsafe_wrap(Array, convert(Ptr{UInt8}, output), len)
-    sz = f(output_jl)
-    unsafe_store!(convert(Ptr{Csize_t}, olen), Csize_t(sz))
-    return Cint(0)
-end
-
-function add_source!(ctx::Entropy, f::Function, threshold, strong)
     Base.@lock ctx.lock begin
         push!(ctx.sources, f)
         # Pass the stored object: mbedtls keeps this pointer, and passing `f` directly can hand
         # it a temporary box (for a closure, say) that nothing keeps alive.
-        add_source!(ctx, c_entropy[], ctx.sources[end], threshold, strong ? 1 : 0)
+        ret = ccall((:mbedtls_entropy_add_source, libmbedcrypto), Cint,
+          (Ptr{Cvoid}, Ptr{Cvoid}, Any, Csize_t, Cint),
+          ctx.data, f_source, ctx.sources[end], threshold, strong)
+        Int(ret)
     end
 end
+
+function jl_entropy(f, output, len, olen)
+    output_jl = unsafe_wrap(Array, convert(Ptr{UInt8}, output), len)
+    # mbedtls reads `olen` bytes from its `len`-byte buffer.
+    sz = clamp(Int(f(output_jl)), 0, Int(len))
+    unsafe_store!(convert(Ptr{Csize_t}, olen), Csize_t(sz))
+    return Cint(0)
+end
+
+add_source!(ctx::Entropy, f::Function, threshold, strong) =
+    add_source!(ctx, c_entropy[], f, threshold, strong ? 1 : 0)
 
 const c_entropy = Ref{Ptr{Cvoid}}(C_NULL)
 function __entropyinit__()
