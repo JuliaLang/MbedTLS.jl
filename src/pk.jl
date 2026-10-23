@@ -30,7 +30,13 @@ Base.unsafe_convert(::Type{Ptr{Cvoid}}, ctx::PKContext) = ctx.data
 # `String(::Vector{UInt8})` takes the vector's memory and empties it; copy the caller's bytes.
 as_string(x) = x isa Vector{UInt8} ? String(copy(x)) : String(x)
 
+# mbedtls parses a key only into an empty context: given one that holds a key, it frees that
+# key and fails.
+check_empty(ctx::PKContext) =
+    get_type(ctx) == PK_NONE || throw(ArgumentError("`ctx` already holds a key"))
+
 function parse_keyfile!(ctx::PKContext, path, password=C_NULL)
+    check_empty(ctx)
     @err_check ccall((:mbedtls_pk_parse_keyfile, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cstring, Cstring),
         ctx, path, password)
@@ -43,6 +49,7 @@ function parse_keyfile(path, password=C_NULL)
 end
 
 function parse_public_keyfile!(ctx::PKContext, path)
+    check_empty(ctx)
     @err_check ccall((:mbedtls_pk_parse_public_keyfile, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cstring),
         ctx, path)
@@ -55,6 +62,7 @@ function parse_public_keyfile(path)
 end
 
 function parse_public_key!(ctx::PKContext, key)
+    check_empty(ctx)
     key_bs = as_string(key)
     @err_check ccall((:mbedtls_pk_parse_public_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cuchar}, Csize_t),
@@ -68,6 +76,7 @@ function parse_public_key(key)
 end
 
 function parse_key!(ctx::PKContext, key, maybe_pw = nothing)
+    check_empty(ctx)
     key_bs = as_string(key)
     if maybe_pw === nothing
         pw = C_NULL
