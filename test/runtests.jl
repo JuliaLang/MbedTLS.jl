@@ -5,6 +5,7 @@ using MbedTLS, Test, Random, Distributed
 # versioned mbedtls libraries
 addprocs(1)
 
+import Sockets
 import Sockets: connect
 
 # Message digests
@@ -347,7 +348,37 @@ let
     @test_throws ArgumentError MbedTLS.finish!(MbedTLS.MD(MD_SHA256, "key"), zeros(UInt8, 31))
 end
 
-# log_secrets
+# log_secrets: each config logs its own handshakes to its own file.
+mktempdir() do d
+    certfile = joinpath(@__DIR__, "clntsrvr", "test.cert")
+    keyfile = joinpath(@__DIR__, "clntsrvr", "test.key")
+    files = [joinpath(d, "a.log"), joinpath(d, "b.log")]
+    confs = [MbedTLS.SSLConfig(false; log_secrets=f) for f in files]
+    port, server = Sockets.listenany(8000)
+    for (i, n) in ((1, 1), (2, 2))
+        for _ in 1:n
+            t = @async begin
+                srvr = MbedTLS.SSLContext()
+                MbedTLS.setup!(srvr, MbedTLS.SSLConfig(certfile, keyfile))
+                MbedTLS.associate!(srvr, Sockets.accept(server))
+                MbedTLS.handshake!(srvr)
+                srvr
+            end
+            ctx = MbedTLS.SSLContext()
+            MbedTLS.setup!(ctx, confs[i])
+            MbedTLS.set_bio!(ctx, connect(port))
+            MbedTLS.handshake!(ctx)
+            close(fetch(t))
+            close(ctx)
+        end
+    end
+    close(server)
+    lines = [readlines(f) for f in files]
+    @test length.(lines) == [1, 2]
+    @test all(l -> occursin(r"^CLIENT_RANDOM [0-9a-f]{64} [0-9a-f]{96}$", l), reduce(vcat, lines))
+    @test length(unique(reduce(vcat, lines))) == 3
+end
+
 mktempdir() do d
 
     f = joinpath(d, "secrets.log")
