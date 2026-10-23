@@ -24,12 +24,12 @@ function f_rng(rng, c_buf, sz)
     MBED_SUCCESS
 end
 
-function seed!(rng::CtrDrbg, entropy, pdata)
-    entropy_func = cglobal((:mbedtls_entropy_func, libmbedcrypto))
+function seed!(rng::CtrDrbg, entropy::Entropy, pdata)
+    entropy_func = @cfunction(f_entropy, Cint, (Ref{Entropy}, Ptr{UInt8}, Csize_t))
     Base.@lock rng.lock @err_check ccall((:mbedtls_ctr_drbg_seed, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
-        rng.data, entropy_func, entropy.data, pdata, sizeof(pdata))
-    # mbedtls keeps `entropy.data`; this also marks `rng` as seeded.
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Csize_t),
+        rng.data, entropy_func, entropy, pdata, sizeof(pdata))
+    # mbedtls keeps `entropy` and reseeds from it; this also marks `rng` as seeded.
     rng.entropy = entropy
     rng
 end
