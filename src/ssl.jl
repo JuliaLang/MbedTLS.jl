@@ -584,7 +584,9 @@ end
 
 function rng!(config::SSLConfig, rng::AbstractRNG)
     config.rng = rng
-    rng!(config, c_rng[], rng)
+    # Pass the stored object: mbedtls keeps this pointer, and passing `rng` directly can hand
+    # it a temporary box (for an immutable RNG, say) that nothing keeps alive.
+    rng!(config, c_rng[], config.rng)
 end
 
 # A CA bundle can hold certificates Mbed TLS 2 can't parse (an Ed25519 root, say). Like
