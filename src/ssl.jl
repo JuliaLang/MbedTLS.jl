@@ -599,11 +599,17 @@ function default_ca_chain()
     chain
 end
 
+# `ca_chain!`, `own_cert!` and `set_alpn!` replace what handshake steps read, and the GC
+# can free a replaced chain or ALPN list; holding `MBEDTLSLOCK` keeps a handshake step on
+# another thread from using it mid-step. (HTTP.jl sets the chain of its shared config for
+# every connection when `HTTP_CA_BUNDLE` is set.)
 function ca_chain!(config::SSLConfig, chain=default_ca_chain())
-    config.chain = chain
-    ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
-        config.data, chain.data, C_NULL)
+    Base.@lock MBEDTLSLOCK begin
+        config.chain = chain
+        ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+            config.data, chain.data, C_NULL)
+    end
 end
 
 """
@@ -619,12 +625,14 @@ function ssl_conf_renegotiation!(config::SSLConfig, renegotiation)
 end
 
 function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
-    config.cert = cert
-    config.key = key
-    push!(config.own_certs, cert, key)
-    @err_check ccall((:mbedtls_ssl_conf_own_cert, libmbedtls), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
-        config.data, cert.data, key.data)
+    Base.@lock MBEDTLSLOCK begin
+        config.cert = cert
+        config.key = key
+        push!(config.own_certs, cert, key)
+        @err_check ccall((:mbedtls_ssl_conf_own_cert, libmbedtls), Cint,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+            config.data, cert.data, key.data)
+    end
 end
 
 function setup!(ctx::SSLContext, conf::SSLConfig)
@@ -668,9 +676,11 @@ end
 function set_alpn!(conf::SSLConfig, protos)
     # mbedtls keeps the NULL-terminated array of string pointers that `cconvert` builds,
     # so `conf` must keep that array alive, not just `protos`.
-    conf.alpn_protos = Base.cconvert(Ptr{Ptr{Cchar}}, protos)
-    @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, libmbedtls), Cint,
-                     (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, conf.alpn_protos)
+    Base.@lock MBEDTLSLOCK begin
+        conf.alpn_protos = Base.cconvert(Ptr{Ptr{Cchar}}, protos)
+        @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, libmbedtls), Cint,
+                         (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, conf.alpn_protos)
+    end
     nothing
 end
 
