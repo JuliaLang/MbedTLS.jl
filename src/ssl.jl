@@ -10,6 +10,8 @@ mutable struct SSLConfig
     dbg
     cert
     key
+    # Every certificate and key passed to `own_cert!`: mbedtls keeps them all.
+    own_certs::Vector{Any}
     alpn_protos
     # One reference held by the config itself, plus one per `SSLContext` set up with it.
     # `mbedtls_ssl_free` reads the config, so `data` is freed only once all are released.
@@ -19,6 +21,7 @@ mutable struct SSLConfig
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
         conf.refs = Threads.Atomic{Int}(1)
+        conf.own_certs = Any[]
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
         ccall((:mbedtls_ssl_conf_verify, libmbedtls), Cvoid,
             (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
@@ -583,6 +586,7 @@ end
 function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
     config.cert = cert
     config.key = key
+    push!(config.own_certs, cert, key)
     @err_check ccall((:mbedtls_ssl_conf_own_cert, libmbedtls), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
         config.data, cert.data, key.data)

@@ -98,7 +98,7 @@ function testverify(certfile, keyfile, badcafile)
 
     @info("connecting to port $port")
     badsslconfig = MbedTLS.SSLConfig(true)
-    badsslconfig.chain = MbedTLS.crt_parse(read(badcafile, String))
+    MbedTLS.ca_chain!(badsslconfig, MbedTLS.crt_parse(read(badcafile, String)))
     try
         clntconn = sslconnect("127.0.0.1", port, badsslconfig)
     catch e
@@ -247,6 +247,30 @@ end
     sleep(0.2)
     @test close(clntconn) === nothing
     @test !isopen(clntconn.bio)
+end
+
+@testset "own_cert! twice" begin
+    certfile = joinpath(@__DIR__, "test.cert")
+    keyfile = joinpath(@__DIR__, "test.key")
+    srvrconfig = MbedTLS.SSLConfig(certfile, keyfile)
+    first_freed = Ref(false)
+    finalizer(_ -> (first_freed[] = true), srvrconfig.cert)
+    MbedTLS.own_cert!(srvrconfig, MbedTLS.crt_parse_file(certfile), MbedTLS.parse_keyfile(keyfile))
+    # mbedtls keeps both pairs, so the first must survive a GC.
+    GC.gc(); GC.gc()
+    @test !first_freed[]
+    (port, server) = listenany(8000)
+    r = @async begin
+        srvrconn = MbedTLS.SSLContext()
+        MbedTLS.setup!(srvrconn, srvrconfig)
+        MbedTLS.associate!(srvrconn, accept(server))
+        MbedTLS.handshake!(srvrconn)
+        srvrconn
+    end
+    clntconn = sslconnect("127.0.0.1", port)
+    close(fetch(r))
+    close(clntconn)
+    close(server)
 end
 
 @testset "testverify" begin
