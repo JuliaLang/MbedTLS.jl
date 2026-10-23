@@ -393,6 +393,71 @@ end
     close(srvrconn)
 end
 
+# A TCP socket whose writes return `delay` seconds after the data is sent, as when the
+# writer's thread is busy.
+mutable struct SlowWriteIO <: IO
+    io::TCPSocket
+    delay::Float64
+end
+for f in (:isopen, :isreadable, :eof, :bytesavailable, :close)
+    @eval Base.$f(x::SlowWriteIO) = $f(x.io)
+end
+Base.unsafe_read(x::SlowWriteIO, p::Ptr{UInt8}, n::UInt) = unsafe_read(x.io, p, n)
+function Base.unsafe_write(x::SlowWriteIO, p::Ptr{UInt8}, n::UInt)
+    r = unsafe_write(x.io, p, n)
+    x.delay > 0 && sleep(x.delay)
+    return r
+end
+
+@testset "write during a renegotiation a reader finishes" begin
+    srvrconfig = MbedTLS.SSLConfig(joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+    clntconfig = MbedTLS.SSLConfig(false)
+    for conf in (srvrconfig, clntconfig)
+        MbedTLS.ssl_conf_renegotiation!(conf, MbedTLS.MBEDTLS_SSL_RENEGOTIATION_ENABLED)
+    end
+    (port, server) = listenany(8000)
+    t = @async begin
+        s = MbedTLS.SSLContext()
+        MbedTLS.setup!(s, srvrconfig)
+        MbedTLS.associate!(s, accept(server))
+        MbedTLS.handshake!(s)
+        s
+    end
+    bio = SlowWriteIO(connect("127.0.0.1", port), 0.0)
+    clntconn = MbedTLS.SSLContext()
+    MbedTLS.setup!(clntconn, clntconfig)
+    MbedTLS.set_bio!(clntconn, bio)
+    MbedTLS.handshake!(clntconn)
+    srvrconn = fetch(t)
+    close(server)
+    @test MbedTLS.@lockdata(srvrconn, ccall((:mbedtls_ssl_renegotiate, MbedTLS.libmbedtls),
+                                            Cint, (Ptr{Cvoid},), srvrconn.data)) == 0
+    MbedTLS.flush_pending(srvrconn)
+    sleep(0.2)
+    eof(clntconn.bio)
+    @test isreadable(clntconn)  # sends the ClientHello
+    srvr = @async String(read(srvrconn, 4))
+    sleep(0.2)
+    srvrwriter = @async write(srvrconn, "hello")  # sent once the renegotiation is done
+    sleep(0.1)
+    # The writer processes the server's reply and sends its Finished, but its write returns
+    # late; meanwhile a reader processes the server's Finished and reads "hello".
+    bio.delay = 0.5
+    writer = @async write(clntconn, "ping")
+    sleep(0.05)
+    bio.delay = 0.0
+    reader = @async String(read(clntconn, 5))
+    done = timedwait(() -> all(istaskdone, (writer, reader, srvr, srvrwriter)), 10.0)
+    @test done === :ok
+    if done === :ok
+        @test fetch(writer) == 4
+        @test fetch(reader) == "hello"
+        @test fetch(srvr) == "ping"
+    end
+    close(clntconn)
+    close(srvrconn)
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),

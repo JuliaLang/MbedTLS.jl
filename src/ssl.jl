@@ -257,11 +257,22 @@ function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
     nwritten = 0                                                                ;@🤖 "ssl_write ➡️  $nbytes"
     while nwritten < nbytes
         n = ssl_write(ctx, buf + nwritten, nbytes - nwritten)
-        if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WAITING_SERVER_HELLO_RENEGO) &&
-           renegotiation_lock(ctx) !== nothing                                  ;@💀 "ssl_write ⌛️"
+        if n == MBEDTLS_ERR_SSL_WANT_READ && renegotiation_lock(ctx) !== nothing &&
+           trylock(ctx.waitlock)                                                ;@💀 "ssl_write ⌛️"
             # The peer is renegotiating: `ssl_write` ran handshake steps and needs the peer's
-            # reply. A task waiting in `eof(ctx)` reads and processes it, so just retry;
-            # with no such task, wait for the reply here.
+            # reply. No reader is waiting for it, so wait here. Reads take `waitlock` while
+            # renegotiation is enabled, but one may have processed the reply before this took
+            # it, so try again first.
+            try
+                n = ssl_write(ctx, buf + nwritten, nbytes - nwritten)
+                n == MBEDTLS_ERR_SSL_WANT_READ && eof(ctx.bio)
+            finally
+                unlock(ctx.waitlock)
+            end
+            n == MBEDTLS_ERR_SSL_WANT_READ && continue
+        end
+        if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WAITING_SERVER_HELLO_RENEGO) &&
+           renegotiation_lock(ctx) !== nothing
             if n == MBEDTLS_ERR_SSL_WAITING_SERVER_HELLO_RENEGO
                 # Application data came before the reply; mbedtls holds it for the next read,
                 # and each `ssl_write` meanwhile counts it against `renego_max_records`.
@@ -269,13 +280,8 @@ function ssl_unsafe_write(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
                 while ssl_check_pending(ctx) && isopen(ctx.bio)
                     sleep(0.001)
                 end
-            elseif trylock(ctx.waitlock)
-                try
-                    eof(ctx.bio)
-                finally
-                    unlock(ctx.waitlock)
-                end
             else
+                # A reader holds `waitlock` and processes the reply; retry shortly.
                 sleep(0.001)
             end
             continue
@@ -876,7 +882,9 @@ https://tls.mbed.org/api/ssl_8h.html#aa2c29eeb1deaf5ad9f01a7515006ede5
 function ssl_read(ctx::SSLContext, ptr, n)::Int
     ret = 0
     rlock = renegotiation_lock(ctx)
-    rlock === nothing || lock(rlock)
+    # Reads hold `waitlock` too, so a write waiting for the peer's reply can't miss it; see
+    # `ssl_unsafe_write`.
+    rlock === nothing || (lock(ctx.waitlock); lock(rlock))
     queued = try
         @lockdata ctx begin
             nqueued = nqueued_records(ctx)
@@ -896,7 +904,7 @@ function ssl_read(ctx::SSLContext, ptr, n)::Int
             nqueued_records(ctx) != nqueued
         end
     finally
-        rlock === nothing || unlock(rlock)
+        rlock === nothing || (unlock(rlock); unlock(ctx.waitlock))
     end
     # Reading rarely sends (an alert, say); flush only then, so a reader doesn't block on
     # another task's queued writes.
