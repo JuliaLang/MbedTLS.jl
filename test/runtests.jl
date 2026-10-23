@@ -184,6 +184,17 @@ let rng = MbedTLS.CtrDrbg()
     @test 0 <= rand(rng, Float64) < 1
     @test rand(rng, 1:10) in 1:10
     @test all(x -> 0 <= x < 1, rand!(rng, zeros(100)))
+
+    # Seeding again after use works, and the generator later reseeds from the new Entropy.
+    for _ in 1:400
+        rand(rng, UInt8)
+    end
+    MbedTLS.seed!(rng, MbedTLS.Entropy())
+    GC.gc()
+    for _ in 1:10_001  # past the reseed interval
+        rand(rng, UInt8)
+    end
+    @test rand(rng, UInt64) isa UInt64
 end
 
 # Basic TLS client functionality
