@@ -167,6 +167,13 @@ function reset!(ctx::MD{true})
         ctx.data)
 end
 
+# Unless `kind` is `MD_NONE`, Mbed TLS reads `get_size(kind)` bytes of a hash, whatever its length.
+function check_hash_size(kind::MDKind, hash)
+    kind == MD_NONE || sizeof(hash) == get_size(kind) ||
+        throw(ArgumentError("a $kind hash has $(get_size(kind)) bytes, not $(sizeof(hash))"))
+    return
+end
+
 function digest!(kind::MDKind, msg, buf)
     @err_check ccall((:mbedtls_md, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}),
