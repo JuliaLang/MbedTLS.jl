@@ -47,12 +47,17 @@ mutable struct SSLContext <: IO
     bytesavailable::Int
     close_notify_sent::Bool
     bio
+    # What mbedtls was given as its bio: `bio` plus the records waiting to be written to it.
+    sendbio
+    # Serializes writes of queued records to `bio`, so they reach it in order.
+    sendlock::ReentrantLock
 
     function SSLContext()
         ctx = new()
         ctx.data = Libc.malloc(1000)  # 488
         ctx.datalock = ReentrantLock()
         ctx.waitlock = ReentrantLock()
+        ctx.sendlock = ReentrantLock()
         ctx.isreadable = false
         ctx.bytesavailable = -1
         ctx.close_notify_sent = false
@@ -252,19 +257,26 @@ end
 
 # Sending Encrypted Data
 
+# The bio handed to mbedtls. `f_send` only queues records in `pending`; `flush_pending`
+# writes them to `io` after the mbedtls call returns and `datalock` is released, so a write
+# that blocks on a slow peer doesn't keep other tasks from reading.
+mutable struct SendBIO{T<:IO}
+    io::T
+    pending::Vector{UInt8}
+    nqueued::Int
+end
+
 """
-Copy `nbytes` of encrypted data from `buf` to the underlying `bio` connection.
+Queue `nbytes` of encrypted data from `buf` for the underlying `bio` connection.
 """
-function f_send(bio::IO, buf::Ptr{UInt8}, nbytes::Csize_t)                       ;@🤖 "f_send ➡️  $nbytes"
+function f_send(b::SendBIO, buf::Ptr{UInt8}, nbytes::Csize_t)                    ;@🤖 "f_send ➡️  $nbytes"
+    bio = b.io
     if !isopen(bio) || (bio isa Base.LibuvStream && bio.status == Base.StatusClosing)
         return Cint(MBEDTLS_ERR_NET_CONN_RESET)
     end
-    try
-        return Cint(unsafe_write(bio, buf, nbytes))
-    catch ex
-        ex isa Base.IOError && return Cint(MBEDTLS_ERR_NET_SEND_FAILED)
-        rethrow() # this may corrupt memory, lead to undefined behavior, or (hopefully) just be badly fatal
-    end
+    append!(b.pending, unsafe_wrap(Array, buf, nbytes))
+    b.nqueued += 1
+    return Cint(nbytes)
 end
 
 
@@ -404,6 +416,8 @@ function f_recv(bio::IO, buf::Ptr{UInt8}, nbytes::Csize_t)
     return Cint(n)
 end
 
+f_recv(b::SendBIO, buf::Ptr{UInt8}, nbytes::Csize_t) = f_recv(b.io, buf, nbytes)
+
 
 """
 Connect `f_send` and `f_recv` callback functions to `SSLContext`.
@@ -411,10 +425,11 @@ Connect `f_send` and `f_recv` callback functions to `SSLContext`.
 function set_bio!(ctx::SSLContext, bio::T) where {T<:IO}
     isopen(bio) || throw(ArgumentError("`set_bio!` requires `isopen(bio)`"))
     ctx.bio = bio
+    ctx.sendbio = SendBIO{T}(bio, UInt8[], 0)
     # Callbacks specialized on `T` keep the calls on `bio` statically dispatched.
-    ssl_set_bio(ctx, pointer_from_objref(bio),
-                @cfunction(f_send, Cint, (Ref{T}, Ptr{UInt8}, Csize_t)),
-                @cfunction(f_recv, Cint, (Ref{T}, Ptr{UInt8}, Csize_t)))
+    ssl_set_bio(ctx, pointer_from_objref(ctx.sendbio),
+                @cfunction(f_send, Cint, (Ref{SendBIO{T}}, Ptr{UInt8}, Csize_t)),
+                @cfunction(f_recv, Cint, (Ref{SendBIO{T}}, Ptr{UInt8}, Csize_t)))
     nothing
 end
 
@@ -648,6 +663,34 @@ macro lockdata(ctx, expr)
     end)
 end
 
+nqueued_records(ctx::SSLContext) = isdefined(ctx, :sendbio) ? ctx.sendbio.nqueued : 0
+
+"""
+Write the records queued by `f_send` to `ctx.bio`. Call without holding `datalock`.
+"""
+function flush_pending(ctx::SSLContext)
+    isdefined(ctx, :sendbio) || return
+    lock(ctx.sendlock)
+    try
+        data = @lockdata ctx begin
+            d = ctx.sendbio.pending
+            ctx.sendbio.pending = UInt8[]
+            d
+        end
+        isempty(data) && return
+        try
+            write(ctx.bio, data)
+        catch ex
+            ex isa Base.IOError || rethrow()
+            ssl_abandon(ctx)
+            mbed_ioerr(MBEDTLS_ERR_NET_SEND_FAILED)
+        end
+    finally
+        unlock(ctx.sendlock)
+    end
+    return
+end
+
 """
     get_peer_cert(ctx::SSLContext)
 
@@ -691,6 +734,8 @@ function ssl_handshake(ctx::SSLContext)
         ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
               (Ptr{Cvoid},), ctx.data)
     end
+    flush_pending(ctx)
+    return n
 end
 
 """
@@ -763,7 +808,8 @@ https://tls.mbed.org/api/ssl_8h.html#aa2c29eeb1deaf5ad9f01a7515006ede5
 """
 function ssl_read(ctx::SSLContext, ptr, n)::Int
     ret = 0
-    @lockdata ctx begin
+    queued = @lockdata ctx begin
+        nqueued = nqueued_records(ctx)
         # We want to allow GC to run while this thread is in the `ccall`.
         # When https://github.com/JuliaLang/julia/pull/49933 is completed
         # and lands, this should be changed to what is required by that.
@@ -777,7 +823,11 @@ function ssl_read(ctx::SSLContext, ptr, n)::Int
                         (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
             @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
         end
+        nqueued_records(ctx) != nqueued
     end
+    # Reading rarely sends (an alert, say); flush only then, so a reader doesn't block on
+    # another task's queued writes.
+    queued && flush_pending(ctx)
     return ret
 end
 
@@ -815,6 +865,7 @@ function ssl_write(ctx::SSLContext, ptr, n)::Int
             @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
         end
     end
+    flush_pending(ctx)
     return ret
 end
 
@@ -833,10 +884,12 @@ connection; the current connection must be closed.
 https://tls.mbed.org/api/ssl_8h.html#ac2c1b17128ead2df3082e27b603deb4c
 """
 function ssl_close_notify(ctx::SSLContext)
-    @lockdata ctx begin
-        return ccall((:mbedtls_ssl_close_notify, libmbedtls),
-                     Cint, (Ptr{Cvoid},), ctx.data)
+    n = @lockdata ctx begin
+        ccall((:mbedtls_ssl_close_notify, libmbedtls),
+              Cint, (Ptr{Cvoid},), ctx.data)
     end
+    flush_pending(ctx)
+    return n
 end
 
 """

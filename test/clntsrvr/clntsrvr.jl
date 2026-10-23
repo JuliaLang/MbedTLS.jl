@@ -206,6 +206,25 @@ end
     close(clntconn)
 end
 
+@testset "read while a write is blocked" begin
+    (port, server) = listenany(8000)
+    r = @async sslaccept(server, joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+    clntconn = sslconnect("127.0.0.1", port)
+    srvrconn = fetch(r)
+    close(server)
+    # The server replies without reading the upload, as an HTTP server does with an early
+    # error response. The upload fills the socket buffers and blocks.
+    write(srvrconn, "early reply")
+    writer = @async try write(clntconn, zeros(UInt8, 64 * 1024 * 1024)) catch e; e end
+    sleep(1)
+    reader = @async String(read(clntconn, 11))
+    @test timedwait(() -> istaskdone(reader), 10.0) === :ok
+    @test fetch(reader) == "early reply"
+    close(srvrconn.bio)  # unblocks the writer
+    wait(writer)
+    close(clntconn)
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),
