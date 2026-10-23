@@ -427,6 +427,11 @@ end
 
 include("distrust.jl")
 
-# Races need several threads, and the suite may run with one.
-@test success(pipeline(`$(Base.julia_cmd()) --project=$(Base.active_project()) -t 4 $(joinpath(@__DIR__, "threads.jl"))`;
-                       stdout, stderr))
+# Races need several threads, and the suite may run with one. A race can hang a thread
+# inside a C call, so the child gets a time limit.
+let p = run(pipeline(`$(Base.julia_cmd()) --project=$(Base.active_project()) -t 4 $(joinpath(@__DIR__, "threads.jl"))`;
+                     stdout, stderr); wait=false)
+    timedwait(() -> process_exited(p), 600.0) === :ok || kill(p, Base.SIGKILL)
+    wait(p)
+    @test success(p)
+end

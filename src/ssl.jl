@@ -16,12 +16,20 @@ mutable struct SSLConfig
     # One reference held by the config itself, plus one per `SSLContext` set up with it.
     # `mbedtls_ssl_free` reads the config, so `data` is freed only once all are released.
     refs::Threads.Atomic{Int}
+    # MbedTLS_jll is built without `MBEDTLS_THREADING_C`, and handshakes share this config's
+    # keys and CA chain: `mbedtls_rsa_private` updates an RSA key's blinding values, and
+    # public-key operations cache values in the key. So handshakes on one config take turns.
+    handshake_lock::ReentrantLock
+    # Whether peers may renegotiate, which runs handshake steps inside reads and writes.
+    renegotiation::Bool
 
     function SSLConfig()
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
         conf.refs = Threads.Atomic{Int}(1)
         conf.own_certs = Any[]
+        conf.handshake_lock = ReentrantLock()
+        conf.renegotiation = false
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
         ccall((:mbedtls_ssl_conf_verify, libmbedtls), Cvoid,
             (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
@@ -593,6 +601,7 @@ Enable / Disable renegotiation support for connection when initiated by peer
 See: https://tls.mbed.org/api/ssl_8h.html#aad4f50fc1c0a018fd5eb18fd9621d0d3
 """
 function ssl_conf_renegotiation!(config::SSLConfig, renegotiation)
+    config.renegotiation = renegotiation == MBEDTLS_SSL_RENEGOTIATION_ENABLED
     ccall((:mbedtls_ssl_conf_renegotiation, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Cint),
         config.data, renegotiation)
@@ -746,8 +755,15 @@ function ssl_setup(ctx::SSLContext, conf::SSLConfig)
     end
 end
 
+# With renegotiation enabled, `mbedtls_ssl_read` and `mbedtls_ssl_write` can run handshake
+# steps, which use the config's keys as `ssl_handshake` does.
+renegotiation_lock(ctx::SSLContext) =
+    isdefined(ctx, :config) && ctx.config.renegotiation ? ctx.config.handshake_lock : nothing
+
 function ssl_handshake(ctx::SSLContext)
-    n = @lockdata ctx begin
+    # Records are written to the socket after this, in `flush_pending`, so the lock is held
+    # only for the computation.
+    n = Base.@lock ctx.config.handshake_lock @lockdata ctx begin
         ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
               (Ptr{Cvoid},), ctx.data)
     end
@@ -825,22 +841,28 @@ https://tls.mbed.org/api/ssl_8h.html#aa2c29eeb1deaf5ad9f01a7515006ede5
 """
 function ssl_read(ctx::SSLContext, ptr, n)::Int
     ret = 0
-    queued = @lockdata ctx begin
-        nqueued = nqueued_records(ctx)
-        # We want to allow GC to run while this thread is in the `ccall`.
-        # When https://github.com/JuliaLang/julia/pull/49933 is completed
-        # and lands, this should be changed to what is required by that.
-        ccd = Base.cconvert(Ptr{Cvoid}, ctx.data)
-        cptr = Base.cconvert(Ptr{Cvoid}, ptr)
-        GC.@preserve ccd cptr begin
-            ucd = Base.unsafe_convert(Ptr{Cvoid}, ccd)::Ptr{Cvoid}
-            ucptr = Base.unsafe_convert(Ptr{Cvoid}, cptr)::Ptr{Cvoid}
-            gc_state = @ccall(jl_gc_safe_enter()::Int8)
-            ret = ccall((:mbedtls_ssl_read, libmbedtls), Cint,
-                        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
-            @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
+    rlock = renegotiation_lock(ctx)
+    rlock === nothing || lock(rlock)
+    queued = try
+        @lockdata ctx begin
+            nqueued = nqueued_records(ctx)
+            # We want to allow GC to run while this thread is in the `ccall`.
+            # When https://github.com/JuliaLang/julia/pull/49933 is completed
+            # and lands, this should be changed to what is required by that.
+            ccd = Base.cconvert(Ptr{Cvoid}, ctx.data)
+            cptr = Base.cconvert(Ptr{Cvoid}, ptr)
+            GC.@preserve ccd cptr begin
+                ucd = Base.unsafe_convert(Ptr{Cvoid}, ccd)::Ptr{Cvoid}
+                ucptr = Base.unsafe_convert(Ptr{Cvoid}, cptr)::Ptr{Cvoid}
+                gc_state = @ccall(jl_gc_safe_enter()::Int8)
+                ret = ccall((:mbedtls_ssl_read, libmbedtls), Cint,
+                            (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
+                @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
+            end
+            nqueued_records(ctx) != nqueued
         end
-        nqueued_records(ctx) != nqueued
+    finally
+        rlock === nothing || unlock(rlock)
     end
     # Reading rarely sends (an alert, say); flush only then, so a reader doesn't block on
     # another task's queued writes.
@@ -867,20 +889,26 @@ https://tls.mbed.org/api/ssl_8h.html#a5bbda87d484de82df730758b475f32e5
 """
 function ssl_write(ctx::SSLContext, ptr, n)::Int
     ret = 0
-    @lockdata ctx begin
-        # We want to allow GC to run while this thread is in the `ccall`.
-        # When https://github.com/JuliaLang/julia/pull/49933 is completed
-        # and lands, this should be changed to what is required by that.
-        ccd = Base.cconvert(Ptr{Cvoid}, ctx.data)
-        cptr = Base.cconvert(Ptr{Cvoid}, ptr)
-        GC.@preserve ccd cptr begin
-            ucd = Base.unsafe_convert(Ptr{Cvoid}, ccd)::Ptr{Cvoid}
-            ucptr = Base.unsafe_convert(Ptr{Cvoid}, cptr)::Ptr{Cvoid}
-            gc_state = @ccall(jl_gc_safe_enter()::Int8)
-            ret = ccall((:mbedtls_ssl_write, libmbedtls), Cint,
-                        (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
-            @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
+    rlock = renegotiation_lock(ctx)
+    rlock === nothing || lock(rlock)
+    try
+        @lockdata ctx begin
+            # We want to allow GC to run while this thread is in the `ccall`.
+            # When https://github.com/JuliaLang/julia/pull/49933 is completed
+            # and lands, this should be changed to what is required by that.
+            ccd = Base.cconvert(Ptr{Cvoid}, ctx.data)
+            cptr = Base.cconvert(Ptr{Cvoid}, ptr)
+            GC.@preserve ccd cptr begin
+                ucd = Base.unsafe_convert(Ptr{Cvoid}, ccd)::Ptr{Cvoid}
+                ucptr = Base.unsafe_convert(Ptr{Cvoid}, cptr)::Ptr{Cvoid}
+                gc_state = @ccall(jl_gc_safe_enter()::Int8)
+                ret = ccall((:mbedtls_ssl_write, libmbedtls), Cint,
+                            (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), ucd, ucptr, n)
+                @ccall(jl_gc_safe_leave(gc_state::Int8)::Cvoid)
+            end
         end
+    finally
+        rlock === nothing || unlock(rlock)
     end
     flush_pending(ctx)
     return ret
