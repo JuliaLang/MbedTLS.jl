@@ -1,3 +1,6 @@
+# `Base.GMP.libgmp` was added in Julia 1.9
+const libgmp = isdefined(Base.GMP, :libgmp) ? Base.GMP.libgmp : :libgmp
+
 struct mbedtls_mpi
     s::Cint
     n::Csize_t
@@ -16,31 +19,54 @@ struct mbedtls_rsa_context
     # are not required for this wrapper
 end
 
+struct MPI
+    ptr::Ptr{mbedtls_mpi}
+
+    # Used for rooting only
+    owner::Any
+end
+Base.unsafe_convert(::Type{Ptr{mbedtls_mpi}}, mpi::MPI) = mpi.ptr
+
 mutable struct RSA
     data::Ptr{mbedtls_rsa_context}
+
+    # Used for rooting only
+    owner::Any
 
     function RSA(padding=MBEDTLS_RSA_PKCS_V21, hash_id=MD_MD5)
         ctx = new()
         ctx.data = Libc.malloc(1000)
         ccall((:mbedtls_rsa_init, libmbedcrypto), Cvoid,
-            (Ptr{Cvoid}, Cint, Cint),
-            ctx.data, padding, hash_id)
+            (Ptr{mbedtls_rsa_context}, Cint, Cint),
+            ctx, padding, hash_id)
         finalizer(ctx->begin
-            ccall((:mbedtls_rsa_free, libmbedcrypto), Cvoid, (Ptr{Cvoid},), ctx.data)
+            ccall((:mbedtls_rsa_free, libmbedcrypto), Cvoid, (Ptr{mbedtls_rsa_context},), ctx)
             Libc.free(ctx.data)
         end, ctx)
         ctx
     end
+
+    RSA(data::Ptr{mbedtls_rsa_context}, @nospecialize(owner)) = new(data, owner)
 end
 
-function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
+function Base.getproperty(ctx::RSA, s::Symbol)
+    if s in (:N, :E, :D, :P, :Q)
+        return MPI(Ptr{mbedtls_mpi}(getfield(ctx, :data) +
+            fieldoffset(mbedtls_rsa_context, Base.fieldindex(mbedtls_rsa_context, s))), ctx)
+    end
+    return getfield(ctx, s)
+end
+
+Base.unsafe_convert(::Type{Ptr{mbedtls_rsa_context}}, rsa::RSA) = rsa.data
+
+function mpi_import!(mpi::Union{Ptr{mbedtls_mpi}, MPI}, b::BigInt)
     # Export from GMP
     size = ndigits(b, base=2)
     nbytes = div(size+8-1,8)
     data = Vector{UInt8}(undef, nbytes)
     count = Ref{Csize_t}(0)
     # TODO Replace `Any` with `Ref{BigInt}` when 0.6 support is dropped.
-    ccall((:__gmpz_export,:libgmp), Ptr{Cvoid},
+    ccall((:__gmpz_export,libgmp), Ptr{Cvoid},
             (Ptr{Cvoid}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Any),
             data, count, 1, 1, 1, 0, b)
     @assert count[] == nbytes
@@ -50,20 +76,47 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
         mpi, data, nbytes)
 end
 
-function mpi_size(mpi::Ptr{mbedtls_mpi})
+"""
+    mpi_export(mpi) -> Vector{UInt8}
+
+Return the big-endian bytes of `mpi`, without leading zeros.
+"""
+function mpi_export(mpi::Union{Ptr{mbedtls_mpi}, MPI})
+    buf = Vector{UInt8}(undef, mpi_size(mpi))
+    @err_check ccall((:mbedtls_mpi_write_binary, libmbedcrypto), Cint,
+        (Ptr{mbedtls_mpi}, Ptr{UInt8}, Csize_t),
+        mpi, buf, sizeof(buf))
+    return buf
+end
+
+"""
+    mpi_export!(io::IO, mpi) -> Int
+
+Write the big-endian bytes of `mpi`, without leading zeros, to `io`, and return the number
+of bytes written.
+"""
+mpi_export!(io::IO, mpi::Union{Ptr{mbedtls_mpi}, MPI}) = write(io, mpi_export(mpi))
+
+function mpi_size(mpi::Union{Ptr{mbedtls_mpi}, MPI})
     ccall((:mbedtls_mpi_size, libmbedcrypto), Csize_t, (Ptr{mbedtls_mpi},), mpi)
 end
 
 function pubkey_from_vals!(ctx::RSA, e::BigInt, n::BigInt)
-    Nptr = Ptr{mbedtls_mpi}(ctx.data+fieldoffset(mbedtls_rsa_context,3 #= :N =#))
-    mpi_import!(Nptr, n)
-    mpi_import!(Ptr{mbedtls_mpi}(ctx.data+fieldoffset(mbedtls_rsa_context,4 #= :E =#)), e)
-    nptr_size = mpi_size(Nptr)
-    unsafe_store!(Ptr{Csize_t}(ctx.data+fieldoffset(mbedtls_rsa_context,2 #=:len =#)),
-        nptr_size)
+    mpi_import!(ctx.N, n)
+    mpi_import!(ctx.E, e)
+    @GC.preserve ctx begin
+        nptr_size = mpi_size(ctx.N)
+        unsafe_store!(Ptr{Csize_t}(ctx.data+fieldoffset(mbedtls_rsa_context, 2 #= :len =#)), nptr_size)
+    end
     @err_check ccall((:mbedtls_rsa_check_pubkey, libmbedcrypto), Cint,
-        (Ptr{Cvoid},), ctx.data)
+        (Ptr{mbedtls_rsa_context},), ctx)
     ctx
+end
+
+function complete!(ctx::RSA)
+    @err_check ccall((:mbedtls_rsa_complete, libmbedcrypto), Cint,
+        (Ptr{mbedtls_rsa_context},), ctx)
+    return nothing
 end
 
 function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; using_public=true)
@@ -71,22 +124,20 @@ function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; usin
         error("Private key verification requires the rng")
     # All errors, including validation errors throw
     @err_check ccall((:mbedtls_rsa_pkcs1_verify, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
-        ctx.data,
+        (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Any, Cint, Cint, Csize_t, Ptr{UInt8}, Ptr{UInt8}),
+        ctx,
         rng == nothing ? C_NULL : c_rng[],
         rng == nothing ? Ref{Any}() : rng,
         using_public ? 0 : 1,
         hash_alg, sizeof(hash), hash, signature)
 end
 
-
 function gen_key!(ctx::RSA, f_rng, rng, nbits, exponent)
     @err_check ccall((:mbedtls_rsa_gen_key, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Cint, Cint),
-        ctx.data, f_rng, rng, nbits, exponent)
+        (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Any, Cint, Cint),
+        ctx, f_rng, rng, nbits, exponent)
     ctx
 end
-
 
 function gen_key(rng::AbstractRNG, nbits=2048, exponent=65537)
     ctx = RSA()
@@ -96,14 +147,14 @@ end
 
 function public(ctx::RSA, input, output)
     @err_check ccall((:mbedtls_rsa_public, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}), ctx.data, input, output)
+        (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Ptr{Cvoid}), ctx, input, output)
     output
 end
 
 function private(ctx::RSA, f_rng, rng, input, output)
     @err_check ccall((:mbedtls_rsa_private, libmbedcrypto), Cint,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Ptr{Cvoid}),
-        ctx.data, f_rng, rng, input, output)
+        (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Ptr{Cvoid}),
+        ctx, f_rng, rng, input, output)
     output
 end
 

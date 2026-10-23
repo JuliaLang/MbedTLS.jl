@@ -43,6 +43,9 @@ end
 function MDInfo(kind::AbstractString)
     ret = ccall((:mbedtls_md_info_from_string, libmbedcrypto), Ptr{Cvoid},
         (Cstring,), String(kind))
+    if ret == C_NULL
+        error("Could not find MD type for name $(repr(kind))")
+    end
     MDInfo(ret)
 end
 
@@ -89,14 +92,20 @@ function MD(kind::MDKind, key)
     ctx
 end
 
-function Base.copy(md::MD)
-    new_md = MD()
+function Base.copy(md::MD{false})
+    new_md = MD{false}()
+    new_md.info = md.info
+    @err_check ccall((:mbedtls_md_setup, libmbedcrypto), Cint,
+        (Ptr{Cvoid}, Ptr{Cvoid}, Cint),
+        new_md.data, md.info.data, 0)
     @err_check ccall((:mbedtls_md_clone, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}),
         new_md.data, md.data)
-    new_md.info = md.info
     new_md
 end
+
+# `mbedtls_md_clone` copies the digest state but not the HMAC key state.
+Base.copy(::MD{true}) = throw(ArgumentError("an HMAC context cannot be copied"))
 
 """
 `get_size(kind::MDKind) -> Int`
@@ -130,18 +139,11 @@ function _write(ctx::MD{true}, buf, size)
         ctx.data, buf, size)
 end
 
-function Base.write(ctx::MD, buf::Vector)
-    isbitstype(eltype(buf)) || error("Expected a vector of bits types got $(typeof(buf))")
-    _write(ctx, buf, sizeof(buf))
+function Base.unsafe_write(ctx::MD, buf::Ptr{UInt8}, nbytes::UInt)
+    _write(ctx, buf, nbytes)
+    return Int(nbytes)
 end
-# To avoid ambiguity warnings
-Base.write(ctx::MD, buf::Vector{UInt8}) = _write(ctx, buf, sizeof(buf))
-
-function Base.write(ctx::MD, i::Union{Float16,Float32,Float64,Int128,Int16,Int32,Int64,UInt128,UInt16,UInt32,UInt64})
-    _write(ctx, Ref(i), sizeof(i))
-end
-Base.write(ctx::MD, i::UInt8) = _write(ctx, Ref(i), sizeof(i))
-Base.write(ctx::MD, i::Int8) = _write(ctx, Ref(i), sizeof(i))
+Base.write(ctx::MD, b::UInt8) = unsafe_write(ctx, Ref(b), 1)
 
 function finish!(ctx::MD{false}, buf)
     @err_check ccall((:mbedtls_md_finish, libmbedcrypto), Cint,

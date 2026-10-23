@@ -11,21 +11,29 @@ mutable struct SSLConfig
     cert
     key
     alpn_protos
+    # One reference held by the config itself, plus one per `SSLContext` set up with it.
+    # `mbedtls_ssl_free` reads the config, so `data` is freed only once all are released.
+    refs::Threads.Atomic{Int}
 
     function SSLConfig()
         conf = new()
         conf.data = Libc.malloc(1000)  # 360
+        conf.refs = Threads.Atomic{Int}(1)
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
-        finalizer(x->begin
-            data = x.data
-            @async begin
-                ccall((:mbedtls_ssl_config_free, libmbedtls),
-                      Cvoid, (Ptr{Cvoid},), data)
-                Libc.free(data)
-            end
-        end, conf)
+        ccall((:mbedtls_ssl_conf_verify, libmbedtls), Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+            conf.data, c_verify[], C_NULL)
+        finalizer(release!, conf)
         conf
     end
+end
+
+function release!(conf::SSLConfig)
+    if Threads.atomic_sub!(conf.refs, 1) == 1
+        ccall((:mbedtls_ssl_config_free, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
+        Libc.free(conf.data)
+    end
+    return
 end
 
 Base.show(io::IO, c::SSLConfig) = print(io, "MbedTLS.SSLConfig()")
@@ -50,11 +58,11 @@ mutable struct SSLContext <: IO
         ctx.close_notify_sent = false
         ccall((:mbedtls_ssl_init, libmbedtls), Cvoid, (Ptr{Cvoid},), ctx.data)
         finalizer(x->begin
-            data = x.data
             @async begin
                 ccall((:mbedtls_ssl_free, libmbedtls),
-                      Cvoid, (Ptr{Cvoid},), ctx.data)
-                Libc.free(ctx.data)
+                      Cvoid, (Ptr{Cvoid},), x.data)
+                Libc.free(x.data)
+                isdefined(x, :config) && release!(x.config)
             end
         end, ctx)
         ctx
@@ -536,6 +544,7 @@ function own_cert!(config::SSLConfig, cert::CRT, key::PKContext)
 end
 
 function setup!(ctx::SSLContext, conf::SSLConfig)
+    Threads.atomic_add!(conf.refs, 1)
     ctx.config = conf
     ssl_setup(ctx, conf)
 end
@@ -553,7 +562,9 @@ end
 
 function dbg!(conf::SSLConfig, f)
     conf.dbg = f
-    dbg!(conf, c_dbg[], f)
+    # Pass the stored object: mbedtls keeps this pointer, and passing `f` directly can hand
+    # it a temporary box (for a closure, say) that nothing keeps alive.
+    dbg!(conf, c_dbg[], conf.dbg)
     nothing
 end
 
@@ -797,12 +808,90 @@ end
 const c_send = Ref{Ptr{Cvoid}}(C_NULL)
 const c_recv = Ref{Ptr{Cvoid}}(C_NULL)
 const c_dbg = Ref{Ptr{Cvoid}}(C_NULL)
+const c_verify = Ref{Ptr{Cvoid}}(C_NULL)
 const DEFAULT_CERT = Ref{String}()
+
+# SHA-256 of the DER SubjectPublicKeyInfo of the eMudhra intermediate CA keys compromised in
+# October 2026 (https://emudhra.we-have-a-problem.com/). The bundled CA roots cannot express
+# this, and matching on the key also catches the cross-signed certificates.
+const DISTRUSTED_SPKI_SHA256 = Set(hex2bytes.([
+    "ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105", # EM DV TLS CA - G3B
+    "49dd353dc2b919a3770645117d0e60c16115e7d1bc259eefe734b00ea434fe5f", # EM DV TLS CA - G3C
+    "e0254c7fcdc265e2f0f8a428dabb75ab4ae039b4872d62f5ee57f0877d5a8a41", # EM EV TLS CA - G3B
+    "5c0660a2b164910d8ff589c18e14552e9e0ec237dcefe2cb736d41a4811f81a0", # EM EV TLS CA - G3C
+    "43bffa19d6ef651451f6841e019931e96f6f2eaeff28ab4b6f1ce4576de2717b", # EM OV TLS CA - G3B
+    "63ecefee431d49523bc1136c4e72d0206a477086caf606cd5cf025686c109cf8", # EM OV TLS CA - G3C
+    "ec4ffa1ad0ac88081314b7aaffef6a91f97cd57291bb5ba686c5415f5eb4f6b6", # EM OV CS CA - G3B
+    "92c063d67e8f14db71d288e11266ffdaf69cbf115f7bab14f3bc2f68d25e0e30", # EM OV CS CA - G3C
+]))
+
+struct X509Buf
+    tag::Cint
+    len::Csize_t
+    p::Ptr{UInt8}
+end
+
+# The leading fields of `mbedtls_x509_crt` from Mbed TLS 2.17 through 2.28. Mbed TLS 2.16 lacks
+# `own_buffer`; the `MbedTLS_jll` compat excludes it.
+struct X509CrtHead
+    own_buffer::Cint
+    raw::X509Buf
+    tbs::X509Buf
+end
+
+# Returns the first index of the contents of the DER element at `i`, and its last index.
+function der_element(der, i)
+    len = Int(der[i + 1])
+    hdr = 2
+    if len >= 0x80
+        nbytes = len & 0x7f
+        len = 0
+        for j in 1:nbytes
+            len = len << 8 | der[i + 1 + j]
+        end
+        hdr += nbytes
+    end
+    last = i + hdr + len - 1
+    last <= length(der) || throw(ArgumentError("truncated DER element"))
+    return i + hdr, last
+end
+
+# The DER SubjectPublicKeyInfo of a DER TBSCertificate.
+function spki_der(tbs)
+    i, _ = der_element(tbs, 1)
+    # Skip the optional explicit version tag.
+    tbs[i] == 0xa0 && (i = der_element(tbs, i)[2] + 1)
+    # Skip serialNumber, signature, issuer, validity and subject.
+    for _ in 1:5
+        i = der_element(tbs, i)[2] + 1
+    end
+    return tbs[i:der_element(tbs, i)[2]]
+end
+
+function spki_sha256(crt::Ptr{Cvoid})
+    tbs = unsafe_load(Ptr{X509CrtHead}(crt)).tbs
+    return digest(MD_SHA256, spki_der(unsafe_wrap(Array, tbs.p, tbs.len)))
+end
+
+# Called for each certificate in the chain being verified, including the trusted root.
+function f_verify(p::Ptr{Cvoid}, crt::Ptr{Cvoid}, depth::Cint, flags::Ptr{UInt32})
+    distrusted = try
+        spki_sha256(crt) in DISTRUSTED_SPKI_SHA256
+    catch
+        # Fail closed rather than throw from a C callback.
+        true
+    end
+    if distrusted
+        unsafe_store!(flags, unsafe_load(flags) | UInt32(MBEDTLS_X509_BADCERT_OTHER))
+    end
+    return Cint(0)
+end
 
 function __sslinit__()
     c_send[] = @cfunction(f_send, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
     c_recv[] = @cfunction(f_recv, Cint, (Ptr{Cvoid}, Ptr{UInt8}, Csize_t))
     c_dbg[] = @cfunction(f_dbg, Cvoid, (Any, Cint, Ptr{UInt8}, Cint, Ptr{UInt8}))
+    c_verify[] = @cfunction(f_verify, Cint, (Ptr{Cvoid}, Ptr{Cvoid}, Cint, Ptr{UInt32}))
     # Note: `MozillaCACerts_jll.cacert` is filled by `__init__`
     if haskey(ENV, "MBEDTLSJL_CERT_PEM_FILE")
         fallback = abspath(ENV["MBEDTLSJL_CERT_PEM_FILE"])

@@ -21,6 +21,22 @@ let
     plain_text = decrypt(CIPHER_AES, secret_key, cipher_text, iv)
 
     @test message == String(plain_text)
+
+    @test MbedTLS.CipherInfo(CIPHER_AES) isa MbedTLS.CipherInfo
+    @test encrypt(Cipher(CIPHER_AES), secret_key, message, iv) == cipher_text
+    @test encrypt(CIPHER_AES, secret_key, message, UInt8[]) == encrypt(CIPHER_AES, secret_key, message)
+
+    # The streaming API matches the one-shot `encrypt`.
+    cipher = Cipher(MbedTLS.CIPHER_AES_256_CBC)
+    MbedTLS.set_key!(cipher, secret_key, MbedTLS.ENCRYPT)
+    MbedTLS.set_iv!(cipher, iv)
+    head, tail = zeros(UInt8, 64), zeros(UInt8, 16)
+    n = MbedTLS.update!(cipher, message, head)
+    m = MbedTLS.finish!(cipher, tail)
+    @test [head[1:n]; tail[1:m]] == cipher_text
+    out = zeros(UInt8, 64)
+    n = MbedTLS.crypt!(cipher, message, out)
+    @test out[1:n] == encrypt(CIPHER_AES, secret_key, message)
 end
 
 # openssl rsa -inform PEM -text -noout < key.pem
@@ -83,6 +99,18 @@ let
           0x4f,0x0b,0x01,0xcb,0x4f,0xf2,0xe4,0xc9,0xfd,0x1d,0xb8,0x5c,0x40,0xf2,
           0xeb,0x76,0x2b,0x5f]
     verify_key_pem("MbedTLS.jl", signature)
+end
+
+# CtrDrbg
+let rng = MbedTLS.CtrDrbg()
+    @test_throws ArgumentError rand(rng, 16)
+    MbedTLS.seed!(rng, MbedTLS.Entropy())
+    @test length(rand(rng, 5000)) == 5000
+    @test rand(rng, UInt64) isa UInt64
+    @test rand(rng, Bool) isa Bool
+    @test 0 <= rand(rng, Float64) < 1
+    @test rand(rng, 1:10) in 1:10
+    @test all(x -> 0 <= x < 1, rand!(rng, zeros(100)))
 end
 
 # Basic TLS client functionality
@@ -181,25 +209,29 @@ let
         MbedTLS.digest(MD_SHA1, "MbedTLS.jl"), MersenneTwister(0))
     @test signature == output[1:length(signature)]
 
-    key_string = read(open(joinpath(@__DIR__, "key.pem"), "r"))
+    key_path = joinpath(@__DIR__, "key.pem")
+    pubkey_path = joinpath(@__DIR__, "public_key.pem")
     key = MbedTLS.PKContext()
-    MbedTLS.parse_key!(key, key_string)
-    @test MbedTLS.bitlength(key) == 2048
-    @test MbedTLS.get_name(key) == "RSA"
-
-    pubkey_string = read(open(joinpath(@__DIR__, "public_key.pem"), "r"))
+    MbedTLS.parse_key!(key, read(key_path))
     pubkey = MbedTLS.PKContext()
-    MbedTLS.parse_public_key!(pubkey, pubkey_string)
-    @test MbedTLS.bitlength(pubkey) == 2048
-    @test MbedTLS.get_name(pubkey) == "RSA"
+    MbedTLS.parse_public_key!(pubkey, read(pubkey_path))
+    for k in (key, pubkey,
+              MbedTLS.parse_key(read(key_path)), MbedTLS.parse_public_key(read(pubkey_path)),
+              MbedTLS.parse_keyfile(key_path), MbedTLS.parse_public_keyfile(pubkey_path))
+        @test MbedTLS.bitlength(k) == 2048
+        @test MbedTLS.get_name(k) == "RSA"
+    end
 
-    key = MbedTLS.parse_keyfile(joinpath(@__DIR__, "key.pem"))
-    @test MbedTLS.bitlength(key) == 2048
-    @test MbedTLS.get_name(key) == "RSA"
-
-    pubkey = MbedTLS.parse_public_keyfile(joinpath(@__DIR__, "public_key.pem"))
-    @test MbedTLS.bitlength(pubkey) == 2048
-    @test MbedTLS.get_name(pubkey) == "RSA"
+    let rsa = MbedTLS.RSA(key)
+        MbedTLS.complete!(rsa)
+        @test MbedTLS.mpi_export(rsa.E) == [0x01, 0x00, 0x01]
+        @test MbedTLS.mpi_export(rsa.N) == hex2bytes(string(keyPEMN, base=16))
+        buf = IOBuffer()
+        @test MbedTLS.mpi_export!(buf, rsa.E) == 3
+        @test MbedTLS.mpi_export!(buf, rsa.N) == 256
+        @test take!(buf) == [0x01; 0x00; 0x01; MbedTLS.mpi_export(rsa.N)]
+    end
+    @test_throws ArgumentError MbedTLS.RSA(MbedTLS.PKContext())
 
     for md in instances(MbedTLS.MDKind)
         if in(md, (MD_NONE, MD_MD2, MD_MD4))
@@ -234,6 +266,15 @@ let
     write(md, "msg")
     digest3 = MbedTLS.finish!(md)
     @test digest1 ≠ digest3
+
+    md = MbedTLS.MD(MD_SHA256)
+    @test write(md, "Mbed") == 4
+    md2 = copy(md)
+    @test write(md, UInt8['T', 'L', 'S', '.', 'j', 'l']) == 6
+    @test write(md2, "TLS.jl") == 6
+    @test MbedTLS.finish!(md) == MbedTLS.finish!(md2) == MbedTLS.digest(MD_SHA256, "MbedTLS.jl")
+    @test_throws ArgumentError copy(MbedTLS.MD(MD_SHA256, "passcode"))
+    @test_throws ErrorException MbedTLS.MDInfo("NOT-A-DIGEST")
 end
 
 # log_secrets
@@ -258,6 +299,30 @@ mktempdir() do d
     @test occursin(r"^CLIENT_RANDOM [0-9a-f]{64} [0-9a-f]{96}$", read(f, String))
 end
 
+# An SSLContext's finalizer frees it with mbedtls_ssl_free, which reads the SSLConfig, so the
+# config must still exist then. mbedtls_ssl_free logs "=> free" through the config's debug
+# callback, which a freed config no longer has.
+let frees = Threads.Atomic{Int}(0), n = 200
+    logfree(level, file, line, msg) = (startswith(msg, "=> free") && Threads.atomic_add!(frees, 1); nothing)
+    function make_pairs()
+        for _ in 1:n
+            conf = MbedTLS.SSLConfig()
+            MbedTLS.config_defaults!(conf)
+            MbedTLS.dbg!(conf, logfree)
+            MbedTLS.setup!(MbedTLS.SSLContext(), conf)
+        end
+    end
+    MbedTLS.set_dbg_level(2)
+    make_pairs()
+    for _ in 1:300
+        frees[] == n && break
+        GC.gc()
+        sleep(0.1)
+    end
+    MbedTLS.set_dbg_level(0)
+    @test frees[] == n
+end
+
 # Unit test for MBedTLS errorshow (#274)
 let buf = IOBuffer()
     Base.display_error(buf, try MbedTLS.mbed_err(1); catch err; err; end, nothing)
@@ -267,3 +332,5 @@ end
 let
     include("clntsrvr/clntsrvr.jl")
 end
+
+include("distrust.jl")
