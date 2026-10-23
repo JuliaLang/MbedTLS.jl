@@ -12,7 +12,10 @@ mutable struct SSLConfig
     key
     # Every certificate and key passed to `own_cert!`: mbedtls keeps them all.
     own_certs::Vector{Any}
-    alpn_protos
+    # Every protocol list passed to `set_alpn!`: mbedtls keeps the current one (and keeps an
+    # old one when it rejects a new one), and each connection points at the protocol it
+    # negotiated, inside the list that was current then.
+    alpn_protos::Vector{Any}
     # The `log_secrets` file path, which mbedtls's key-export callback receives.
     keylog
     # One reference held by the config itself, plus one per `SSLContext` set up with it.
@@ -26,6 +29,7 @@ mutable struct SSLConfig
         conf.data = Libc.malloc(1000)  # 360
         conf.refs = Threads.Atomic{Int}(1)
         conf.own_certs = Any[]
+        conf.alpn_protos = Any[]
         conf.renegotiation = false
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
         ccall((:mbedtls_ssl_conf_verify, libmbedtls), Cvoid,
@@ -585,17 +589,15 @@ function authmode!(config::SSLConfig, auth)
 end
 
 function rng!(config::SSLConfig, f_rng::Ptr{Cvoid}, rng)
-    ccall((:mbedtls_ssl_conf_rng, libmbedtls), Cvoid,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Any),
-        config.data, f_rng, rng)
-end
-
-function rng!(config::SSLConfig, rng::AbstractRNG)
     config.rng = rng
     # Pass the stored object: mbedtls keeps this pointer, and passing `rng` directly can hand
     # it a temporary box (for an immutable RNG, say) that nothing keeps alive.
-    rng!(config, c_rng[], config.rng)
+    ccall((:mbedtls_ssl_conf_rng, libmbedtls), Cvoid,
+        (Ptr{Cvoid}, Ptr{Cvoid}, Any),
+        config.data, f_rng, config.rng)
 end
+
+rng!(config::SSLConfig, rng::AbstractRNG) = rng!(config, c_rng[], rng)
 
 # A CA bundle can hold certificates Mbed TLS 2 can't parse (an Ed25519 root, say). Like
 # OpenSSL, keep the ones it can: `mbedtls_x509_crt_parse` then returns how many it skipped.
@@ -652,9 +654,12 @@ function setup!(ctx::SSLContext, conf::SSLConfig)
 end
 
 function dbg!(conf::SSLConfig, f::Ptr{Cvoid}, p)
+    conf.dbg = p
+    # Pass the stored object: mbedtls keeps this pointer, and passing `p` directly can hand
+    # it a temporary box (for a closure, say) that nothing keeps alive.
     ccall((:mbedtls_ssl_conf_dbg, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Any),
-        conf.data, f, p)
+        conf.data, f, conf.dbg)
 end
 
 function f_dbg(f, level, filename, number, msg)
@@ -663,10 +668,7 @@ function f_dbg(f, level, filename, number, msg)
 end
 
 function dbg!(conf::SSLConfig, f)
-    conf.dbg = f
-    # Pass the stored object: mbedtls keeps this pointer, and passing `f` directly can hand
-    # it a temporary box (for a closure, say) that nothing keeps alive.
-    dbg!(conf, c_dbg[], conf.dbg)
+    dbg!(conf, c_dbg[], f)
     nothing
 end
 
@@ -684,12 +686,13 @@ function set_dbg_level(level)
 end
 
 function set_alpn!(conf::SSLConfig, protos)
-    # mbedtls keeps the NULL-terminated array of string pointers that `cconvert` builds,
-    # so `conf` must keep that array alive, not just `protos`.
+    # mbedtls keeps the NULL-terminated array of string pointers that `cconvert` builds, and
+    # reads each name up to a NUL, which a `SubString` doesn't end with: copy to `String`s.
+    list = Base.cconvert(Ptr{Ptr{Cchar}}, String[String(p) for p in protos])
     Base.@lock MBEDTLSLOCK begin
-        conf.alpn_protos = Base.cconvert(Ptr{Ptr{Cchar}}, protos)
+        push!(conf.alpn_protos, list)
         @err_check ccall((:mbedtls_ssl_conf_alpn_protocols, libmbedtls), Cint,
-                         (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, conf.alpn_protos)
+                         (Ptr{Cvoid}, Ptr{Ptr{Cchar}}), conf.data, list)
     end
     nothing
 end

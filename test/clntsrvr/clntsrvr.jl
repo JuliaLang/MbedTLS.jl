@@ -120,13 +120,17 @@ end
         joinpath(@__DIR__, "test.key"))
 end
 
+# Sets the ALPN protocols of `conf` to copies of `names`, which only `conf` keeps alive.
+@noinline set_alpn_copies!(conf, names) = MbedTLS.set_alpn!(conf, [string(n) for n in names])
+
 @testset "alpn" begin
     certfile = joinpath(@__DIR__, "test.cert")
     keyfile = joinpath(@__DIR__, "test.key")
     srvrconfig = MbedTLS.SSLConfig(certfile, keyfile)
-    MbedTLS.set_alpn!(srvrconfig, ["http/1.1", "h2"])
+    set_alpn_copies!(srvrconfig, ("http/1.1", "h2"))
     clntconfig = MbedTLS.SSLConfig(false)
-    MbedTLS.set_alpn!(clntconfig, ["h2"])
+    # A `SubString` isn't NUL-terminated where it ends.
+    MbedTLS.set_alpn!(clntconfig, split("h2,x", ","))
     # mbedtls keeps the protocol list that `set_alpn!` hands it; it must survive a GC.
     GC.gc()
     garbage = [zeros(UInt8, 16) for _ in 1:100_000]
@@ -141,6 +145,16 @@ end
     end
     clntconn = sslconnect("127.0.0.1", port, clntconfig)
     srvrconn = fetch(r)
+    @test MbedTLS.alpn_proto(clntconn) == "h2"
+    @test MbedTLS.alpn_proto(srvrconn) == "h2"
+    # A connection points into the list it negotiated with, and mbedtls keeps the current
+    # list when it rejects a new one; both must survive a GC.
+    set_alpn_copies!(srvrconfig, ("http/1.1",))
+    @test_throws MbedTLS.MbedException MbedTLS.set_alpn!(clntconfig, [""])
+    for _ in 1:3
+        garbage = [string("Z", i % 10) for i in 1:100_000]
+        GC.gc()
+    end
     @test MbedTLS.alpn_proto(clntconn) == "h2"
     @test MbedTLS.alpn_proto(srvrconn) == "h2"
     close(clntconn)
