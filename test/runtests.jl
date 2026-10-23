@@ -268,6 +268,30 @@ mktempdir() do d
     @test occursin(r"^CLIENT_RANDOM [0-9a-f]{64} [0-9a-f]{96}$", read(f, String))
 end
 
+# An SSLContext's finalizer frees it with mbedtls_ssl_free, which reads the SSLConfig, so the
+# config must still exist then. mbedtls_ssl_free logs "=> free" through the config's debug
+# callback, which a freed config no longer has.
+let frees = Threads.Atomic{Int}(0), n = 200
+    logfree(level, file, line, msg) = (startswith(msg, "=> free") && Threads.atomic_add!(frees, 1); nothing)
+    function make_pairs()
+        for _ in 1:n
+            conf = MbedTLS.SSLConfig()
+            MbedTLS.config_defaults!(conf)
+            MbedTLS.dbg!(conf, logfree)
+            MbedTLS.setup!(MbedTLS.SSLContext(), conf)
+        end
+    end
+    MbedTLS.set_dbg_level(2)
+    make_pairs()
+    for _ in 1:300
+        frees[] == n && break
+        GC.gc()
+        sleep(0.1)
+    end
+    MbedTLS.set_dbg_level(0)
+    @test frees[] == n
+end
+
 # Unit test for MBedTLS errorshow (#274)
 let buf = IOBuffer()
     Base.display_error(buf, try MbedTLS.mbed_err(1); catch err; err; end, nothing)
@@ -277,3 +301,5 @@ end
 let
     include("clntsrvr/clntsrvr.jl")
 end
+
+include("distrust.jl")

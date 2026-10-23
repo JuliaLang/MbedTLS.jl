@@ -1,3 +1,6 @@
+# `Base.GMP.libgmp` was added in Julia 1.9
+const libgmp = isdefined(Base.GMP, :libgmp) ? Base.GMP.libgmp : :libgmp
+
 struct mbedtls_mpi
     s::Cint
     n::Csize_t
@@ -40,7 +43,7 @@ function mpi_import!(mpi::Ptr{mbedtls_mpi}, b::BigInt)
     data = Vector{UInt8}(undef, nbytes)
     count = Ref{Csize_t}(0)
     # TODO Replace `Any` with `Ref{BigInt}` when 0.6 support is dropped.
-    ccall((:__gmpz_export,:libgmp), Ptr{Cvoid},
+    ccall((:__gmpz_export,libgmp), Ptr{Cvoid},
             (Ptr{Cvoid}, Ptr{Csize_t}, Cint, Csize_t, Cint, Csize_t, Any),
             data, count, 1, 1, 1, 0, b)
     @assert count[] == nbytes
