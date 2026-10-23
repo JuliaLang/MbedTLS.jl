@@ -469,15 +469,15 @@ Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes=length(buf); kw...) 
 
 function Base.readbytes!(ctx::SSLContext, buf::Vector{UInt8}, nbytes::UInt;
                          all::Bool=true)
-    nread = 0
+    nread = UInt(0)
     while nread < nbytes
         if nread == length(buf)
             # `read(ctx)` asks for `typemax(Int)` bytes, so grow `buf` as data arrives.
             eof(ctx) && break
             resize!(buf, min(max(2 * length(buf), 1024), nbytes))
         end
-        nread += GC.@preserve buf ssl_unsafe_read(ctx, pointer(buf) + nread,
-                                                  min(nbytes, length(buf)) - nread)
+        n = UInt(min(nbytes, length(buf))) - nread
+        nread += GC.@preserve buf ssl_unsafe_read(ctx, pointer(buf) + nread, n)
         if (nread == nbytes) || !all || eof(ctx)
             break
         end
