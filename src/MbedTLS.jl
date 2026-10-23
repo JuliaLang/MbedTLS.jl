@@ -58,41 +58,20 @@ end
 
 tls_dbg(level, filename, number, msg) = Base.@debug "from MbedTLS" msg _file=filename _line=number
 
-secrets_log = ""
-secrets_log_file = ""
-secrets_log_state = :incomplete
-
-function tls_dbg_log_secrets(level, filename, number, msg)
-    global secrets_log
-    global secrets_log_file
-    global secrets_log_state
-    if secrets_log_state == :complete
-        return
-    elseif msg == "dumping 'client hello, random bytes' (32 bytes)\n"
-        secrets_log = "CLIENT_RANDOM "
-        secrets_log_state = :client_random
-    elseif msg == "dumping 'master secret' (48 bytes)\n"
-        secrets_log_state = :master_secret
-        secrets_log *= " "
-    elseif secrets_log_state in (:client_random, :master_secret)
-        if occursin(r"^00[0-2]0:", msg)
-            secrets_log *= join(split(msg)[2:17])
-        else
-            if secrets_log_state == :master_secret
-                secrets_log *= "\n"
-                open(secrets_log_file, append=true) do io
-                    write(io, secrets_log)
-                end
-                secrets_log_state = :incomplete
-                secrets_log = ""
-            else
-                secrets_log_state = :incomplete
-            end
-        end
+# Appends the NSS key log line for each TLS 1.2 handshake to the file `path`.
+function f_export_keys(path::String, ms::Ptr{UInt8}, kb::Ptr{UInt8}, maclen::Csize_t,
+                       keylen::Csize_t, ivlen::Csize_t, client_random::Ptr{UInt8},
+                       server_random::Ptr{UInt8}, tls_prf_type::Cint)
+    try
+        line = string("CLIENT_RANDOM ", bytes2hex(unsafe_wrap(Array, client_random, 32)), " ",
+                      bytes2hex(unsafe_wrap(Array, ms, 48)), "\n")
+        open(io -> write(io, line), path; append=true)
+    catch
+        # Losing a key log line must not abort the handshake from inside mbedtls.
     end
+    return Cint(0)
 end
 
-# already defined SSLConfig and SSLContext types in ssl.jl
 """
     SSLConfig(cert_file, key_file)
 
@@ -140,12 +119,14 @@ function SSLConfig(verify::Bool; log_secrets=nothing)
 
     MbedTLS.authmode!(conf,
       verify ? MbedTLS.MBEDTLS_SSL_VERIFY_REQUIRED : MbedTLS.MBEDTLS_SSL_VERIFY_NONE)
+    MbedTLS.dbg!(conf, tls_dbg)
     if log_secrets !== nothing
-        global secrets_log_file = log_secrets
-        set_dbg_level(4)
-        MbedTLS.dbg!(conf, tls_dbg_log_secrets)
-    else
-        MbedTLS.dbg!(conf, tls_dbg)
+        conf.keylog = String(log_secrets)
+        ccall((:mbedtls_ssl_conf_export_keys_ext_cb, libmbedtls), Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Any), conf.data,
+            @cfunction(f_export_keys, Cint, (Ref{String}, Ptr{UInt8}, Ptr{UInt8}, Csize_t,
+                       Csize_t, Csize_t, Ptr{UInt8}, Ptr{UInt8}, Cint)),
+            conf.keylog)
     end
     MbedTLS.ca_chain!(conf)
     conf
