@@ -13,6 +13,8 @@ mutable struct SSLConfig
     # Every certificate and key passed to `own_cert!`: mbedtls keeps them all.
     own_certs::Vector{Any}
     alpn_protos
+    # The `log_secrets` file path, which mbedtls's key-export callback receives.
+    keylog
     # One reference held by the config itself, plus one per `SSLContext` set up with it.
     # `mbedtls_ssl_free` reads the config, so `data` is freed only once all are released.
     refs::Threads.Atomic{Int}
