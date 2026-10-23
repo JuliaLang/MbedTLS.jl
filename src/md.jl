@@ -145,13 +145,21 @@ function Base.unsafe_write(ctx::MD, buf::Ptr{UInt8}, nbytes::UInt)
 end
 Base.write(ctx::MD, b::UInt8) = unsafe_write(ctx, Ref(b), 1)
 
+# Mbed TLS writes a whole digest and takes no output size.
+function check_digest_size(n, buf)
+    sizeof(buf) >= n || throw(ArgumentError("the digest needs $n bytes; `buf` has $(sizeof(buf))"))
+    return
+end
+
 function finish!(ctx::MD{false}, buf)
+    check_digest_size(get_size(ctx), buf)
     @err_check ccall((:mbedtls_md_finish, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}),
         ctx.data, buf)
 end
 
 function finish!(ctx::MD{true}, buf)
+    check_digest_size(get_size(ctx), buf)
     @err_check ccall((:mbedtls_md_hmac_finish, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}),
         ctx.data, buf)
@@ -177,6 +185,7 @@ function check_hash_size(kind::MDKind, hash)
 end
 
 function digest!(kind::MDKind, msg, buf)
+    check_digest_size(get_size(kind), buf)
     @err_check ccall((:mbedtls_md, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}),
         MDInfo(kind).data, msg, sizeof(msg), buf)
@@ -197,8 +206,7 @@ function digest end
 
 In-place version of `digest` that stores the digest to `buffer`.
 
-It is the user's responsibility to ensure that buffer is long enough to contain the digest.
-`get_size(kind::MDKind)` returns the appropriate size.
+`buffer` must hold at least `get_size(kind)` bytes, or an `ArgumentError` is thrown.
 """
 function digest! end
 
@@ -209,6 +217,7 @@ function digest(kind::MDKind, msg)
 end
 
 function digest!(kind::MDKind, msg, key, buf)
+    check_digest_size(get_size(kind), buf)
     @err_check ccall((:mbedtls_md_hmac, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t, Ptr{UInt8}),
         MDInfo(kind).data, key, sizeof(key),

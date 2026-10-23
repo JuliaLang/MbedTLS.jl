@@ -38,6 +38,17 @@ let
     n = MbedTLS.crypt!(cipher, message, out)
     @test out[1:n] == encrypt(CIPHER_AES, secret_key, message)
 
+    # Output buffers must fit what Mbed TLS writes: in CBC mode, up to one extra block.
+    MbedTLS.set_iv!(cipher, iv)
+    @test_throws ArgumentError MbedTLS.update!(cipher, message, zeros(UInt8, sizeof(message)))
+    @test_throws ArgumentError MbedTLS.finish!(cipher, zeros(UInt8, 15))
+    @test_throws ArgumentError MbedTLS.crypt!(cipher, message, zeros(UInt8, 32))
+    ctr = Cipher(MbedTLS.CIPHER_AES_256_CTR)
+    MbedTLS.set_key!(ctr, secret_key, MbedTLS.ENCRYPT)
+    MbedTLS.set_iv!(ctr, iv)
+    @test MbedTLS.update!(ctr, message, zeros(UInt8, sizeof(message))) == sizeof(message)
+    @test MbedTLS.finish!(ctr, UInt8[]) == 0
+
     @test MbedTLS.get_key_bitlen(cipher) == 256
     @test MbedTLS.get_key_bitlen(Cipher(MbedTLS.CIPHER_AES_128_CBC)) == 128
     @test endswith(sprint(show, cipher), ")")
@@ -324,6 +335,12 @@ let
     @test MbedTLS.finish!(md) == MbedTLS.finish!(md2) == MbedTLS.digest(MD_SHA256, "MbedTLS.jl")
     @test_throws ArgumentError copy(MbedTLS.MD(MD_SHA256, "passcode"))
     @test_throws ErrorException MbedTLS.MDInfo("NOT-A-DIGEST")
+
+    # Output buffers must hold a whole digest.
+    @test_throws ArgumentError MbedTLS.digest!(MD_SHA256, "msg", zeros(UInt8, 31))
+    @test_throws ArgumentError MbedTLS.digest!(MD_SHA256, "msg", "key", zeros(UInt8, 31))
+    @test_throws ArgumentError MbedTLS.finish!(MbedTLS.MD(MD_SHA256), zeros(UInt8, 31))
+    @test_throws ArgumentError MbedTLS.finish!(MbedTLS.MD(MD_SHA256, "key"), zeros(UInt8, 31))
 end
 
 # log_secrets

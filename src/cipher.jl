@@ -184,12 +184,38 @@ function Base.show(io::IO, cipher::Cipher)
     print(io, "Cipher($(cipher.data))")
 end
 
-# `mbedtls_cipher_get_key_bitlen` is a static inline function, so read the field it
-# returns: `ctx->cipher_info->key_bitlen`, after the `type` and `mode` enums.
+# The leading fields of `mbedtls_cipher_info_t`. Mbed TLS 2 makes their accessors static
+# inline, so they can't be called.
+struct CipherInfoHead
+    type::Cint
+    mode::Cint
+    key_bitlen::Cuint
+    name::Ptr{Cchar}
+    iv_size::Cuint
+    flags::Cint
+    block_size::Cuint
+end
+
+# `ctx->cipher_info`, or `nothing` before `mbedtls_cipher_setup`
+function cipher_info_head(cipher::Cipher)
+    info = unsafe_load(Ptr{Ptr{CipherInfoHead}}(cipher.data))
+    info == C_NULL ? nothing : unsafe_load(info)
+end
+
 function get_key_bitlen(cipher::Cipher)
-    info = unsafe_load(Ptr{Ptr{Cuint}}(cipher.data))
-    info == C_NULL && return 0
-    Int(unsafe_load(info, 3))
+    info = cipher_info_head(cipher)
+    info === nothing ? 0 : Int(info.key_bitlen)
+end
+
+# `mbedtls_cipher_update`, `_finish` and `_crypt` take no output size. Only CBC writes more
+# than its input: a block it held back, or the final padded block.
+function check_output_size(cipher::Cipher, buf_out, ilen)
+    info = cipher_info_head(cipher)
+    cbc = info !== nothing && info.mode == Cint(CIPHER_MODE_CBC)
+    n = ilen + (cbc ? Int(info.block_size) : 0)
+    buf_out isa Ptr || sizeof(buf_out) >= n ||
+        throw(ArgumentError("`buf_out` needs at least $n bytes, not $(sizeof(buf_out))"))
+    return
 end
 
 tobytes(x::Vector{UInt8}) = x
@@ -223,12 +249,12 @@ end
 Run the given cipher on `buf_in` (a String or `Vector{UInt8}`) and
 store the result of the cipher in `buf_out` (a `Vector{UInt8}`).
 
-It is your responsibility to ensure that `buf_out` is at least as large as necessary
-to hold the result. It should be at least as big as the size of `buf_in` plus the
-block size associated with `cipher`.
+`buf_out` must hold the size of `buf_in`, plus one block in CBC mode, or an
+`ArgumentError` is thrown.
 """
 function update!(cipher::Cipher, buf_in, buf_out)
     buf_in_b = tobytes(buf_in)
+    check_output_size(cipher, buf_out, sizeof(buf_in_b))
     out_ref = Ref{Csize_t}(sizeof(buf_out))
     @err_check ccall((:mbedtls_cipher_update, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ptr{Csize_t}),
@@ -237,6 +263,7 @@ function update!(cipher::Cipher, buf_in, buf_out)
 end
 
 function finish!(cipher::Cipher, buf_out)
+    check_output_size(cipher, buf_out, 0)
     out_ref = Ref{Csize_t}(sizeof(buf_out))
     @err_check ccall((:mbedtls_cipher_finish, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Csize_t}),
@@ -263,6 +290,7 @@ function crypt!(cipher::Cipher, iv, buf_in, buf_out)
     olen_ref = Ref{Csize_t}(sizeof(buf_out))
     iv_b, iv_size = process_iv(iv, cipher)
     buf_in_b = tobytes(buf_in)
+    check_output_size(cipher, buf_out, sizeof(buf_in_b))
     @err_check ccall((:mbedtls_cipher_crypt, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ptr{Csize_t}),
         cipher.data, iv_b, iv_size, buf_in_b, sizeof(buf_in_b),
