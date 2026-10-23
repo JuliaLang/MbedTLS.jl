@@ -16,13 +16,19 @@ end
 show(io::IO, crt::CRT) = print(io, crt_info(crt))
 
 function crt_info(crt::CRT)
-    buf = Base.StringVector(1000)
-    ret = ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
-        (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
-        buf, length(buf), "", crt.data)
-    ret >= 0 || mbed_err(ret)
-    resize!(buf, ret)
-    return String(buf)
+    n = 1000
+    while true
+        buf = Base.StringVector(n)
+        ret = ccall((:mbedtls_x509_crt_info, libmbedx509), Cint,
+            (Ptr{Cvoid}, Csize_t, Cstring, Ptr{Cvoid}),
+            buf, length(buf), "", crt.data)
+        if ret == MBEDTLS_ERR_X509_BUFFER_TOO_SMALL
+            n *= 2
+            continue
+        end
+        ret >= 0 || mbed_err(ret)
+        return String(resize!(buf, ret))
+    end
 end
 
 function crt_parse!(chain, buf::String)

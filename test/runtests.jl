@@ -323,6 +323,13 @@ let frees = Threads.Atomic{Int}(0), n = 200
     @test frees[] == n
 end
 
+# Certificate info longer than the initial 1000-byte buffer
+let crt = MbedTLS.crt_parse_file(joinpath(@__DIR__, "many_sans.pem"))
+    info = sprint(show, crt)
+    @test length(info) > 1000
+    @test occursin("host60.many-sans.test", info)
+end
+
 # Unit test for MBedTLS errorshow (#274)
 let buf = IOBuffer()
     Base.display_error(buf, try MbedTLS.mbed_err(1); catch err; err; end, nothing)
