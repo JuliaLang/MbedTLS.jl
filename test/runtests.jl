@@ -37,6 +37,10 @@ let
     out = zeros(UInt8, 64)
     n = MbedTLS.crypt!(cipher, message, out)
     @test out[1:n] == encrypt(CIPHER_AES, secret_key, message)
+
+    @test MbedTLS.get_key_bitlen(cipher) == 256
+    @test MbedTLS.get_key_bitlen(Cipher(MbedTLS.CIPHER_AES_128_CBC)) == 128
+    @test endswith(sprint(show, cipher), ")")
 end
 
 # openssl rsa -inform PEM -text -noout < key.pem
@@ -366,6 +370,21 @@ let frees = Threads.Atomic{Int}(0), n = 200
     end
     MbedTLS.set_dbg_level(0)
     @test frees[] == n
+end
+
+# The default CA bundle skips certificates Mbed TLS can't parse, here an Ed25519 root.
+let default_cert = MbedTLS.DEFAULT_CERT[]
+    good = read(joinpath(@__DIR__, "clntsrvr", "test.cert"), String)
+    unsupported = read(joinpath(@__DIR__, "ed25519.cert"), String)
+    @test_throws MbedTLS.MbedException MbedTLS.crt_parse(unsupported)
+    try
+        MbedTLS.DEFAULT_CERT[] = good * unsupported
+        conf = MbedTLS.SSLConfig()
+        MbedTLS.ca_chain!(conf)
+        @test sprint(show, conf.chain) == sprint(show, MbedTLS.crt_parse(good))
+    finally
+        MbedTLS.DEFAULT_CERT[] = default_cert
+    end
 end
 
 # Certificate info longer than the initial 1000-byte buffer

@@ -532,7 +532,19 @@ function rng!(config::SSLConfig, rng::AbstractRNG)
     rng!(config, c_rng[], rng)
 end
 
-function ca_chain!(config::SSLConfig, chain=crt_parse(DEFAULT_CERT[]))
+# A CA bundle can hold certificates Mbed TLS 2 can't parse (an Ed25519 root, say). Like
+# OpenSSL, keep the ones it can: `mbedtls_x509_crt_parse` then returns how many it skipped.
+function default_ca_chain()
+    pem = DEFAULT_CERT[]
+    chain = CRT()
+    ret = ccall((:mbedtls_x509_crt_parse, libmbedx509), Cint,
+        (Ptr{Cvoid}, Ptr{UInt8}, Csize_t),
+        chain.data, pem, sizeof(pem) + 1)
+    ret >= 0 || mbed_err(ret)
+    chain
+end
+
+function ca_chain!(config::SSLConfig, chain=default_ca_chain())
     config.chain = chain
     ccall((:mbedtls_ssl_conf_ca_chain, libmbedtls), Cvoid,
         (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
