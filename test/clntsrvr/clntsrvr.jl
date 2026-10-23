@@ -206,6 +206,49 @@ end
     close(clntconn)
 end
 
+function tlspair()
+    (port, server) = listenany(8000)
+    r = @async sslaccept(server, joinpath(@__DIR__, "test.cert"), joinpath(@__DIR__, "test.key"))
+    clntconn = sslconnect("127.0.0.1", port)
+    srvrconn = fetch(r)
+    close(server)
+    return clntconn, srvrconn
+end
+
+@testset "end of stream" begin
+    # Reads after the end of the stream return nothing, as on a socket.
+    clntconn, srvrconn = tlspair()
+    write(srvrconn, "abc")
+    close(srvrconn)
+    @test read(clntconn, 5) == b"abc"
+    @test eof(clntconn)
+    @test readbytes!(clntconn, zeros(UInt8, 5)) == 0
+    @test readavailable(clntconn) == UInt8[]
+    @test read(clntconn, 5) == UInt8[]
+    close(clntconn)
+
+    # Empty application-data records in a row are not the end of the stream.
+    for nempty in 1:3
+        clntconn, srvrconn = tlspair()
+        for _ in 1:nempty
+            @test MbedTLS.ssl_write(srvrconn, Ptr{UInt8}(C_NULL), 0) == 0
+        end
+        write(srvrconn, "hello")
+        @test String(read(clntconn, 5)) == "hello"
+        close(clntconn)
+        close(srvrconn)
+    end
+
+    # `close` doesn't throw when the peer has reset the connection.
+    clntconn, srvrconn = tlspair()
+    write(clntconn, "request")
+    sleep(0.2)
+    close(srvrconn.bio)  # unread data makes this close send a reset
+    sleep(0.2)
+    @test close(clntconn) === nothing
+    @test !isopen(clntconn.bio)
+end
+
 @testset "testverify" begin
     testverify(
         joinpath(@__DIR__, "test.cert"),

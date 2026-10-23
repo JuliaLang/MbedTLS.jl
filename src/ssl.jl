@@ -180,7 +180,12 @@ Send a TLS `close_notify` message to the peer.
 """
 function Base.close(ctx::SSLContext)                                            ;@💀 "close iswritable=$(iswritable(ctx))"
     if iswritable(ctx)
-        closewrite(ctx)
+        try
+            closewrite(ctx)
+        catch e
+            # The peer may already be gone; `closewrite` has then closed `ctx.bio` itself.
+            e isa Base.IOError || rethrow()
+        end
     end
     @static if Sys.iswindows() && VERSION < v"1.9.0"
         # work-around for a libuv regression where we check the wrong flags during closing
@@ -308,7 +313,8 @@ end
 
 Copies at most `nbytes` of decrypted data into `buf`.
 Never blocks to wait for more data to arrive.
-Returns number of bytes copied into `buf` (`<= nbytes`).
+Returns number of bytes copied into `buf` (`<= nbytes`), which is 0 once
+`!isreadable(ctx)`.
 Updates `ctx.bytesavailable` with the number of decrypted bytes remaining in
 the TLS buffer.
 
@@ -328,7 +334,8 @@ When an unhandled exception occurs `isreadable` is set to false.
 """
 function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
 
-    ctx.isreadable || throw(Base.IOError("`ssl_unsafe_read` requires `isreadable(::SSLContext)`", 0))
+    # At end of stream there is nothing to copy, as with any other `IO`.
+    ctx.isreadable || return UInt(0)
 
     nread::UInt = 0
     try
@@ -338,6 +345,12 @@ function ssl_unsafe_read(ctx::SSLContext, buf::Ptr{UInt8}, nbytes::UInt)
                                                                                                        n == MBEDTLS_ERR_SSL_CONN_EOF          ? "(CONN_EOF)" :
                                                                                                        n == MBEDTLS_ERR_NET_CONN_RESET        ? "(CONN_RESET)" :
                                                                                                        n == MBEDTLS_ERR_SSL_WANT_READ         ? "(WANT_READ)" : "")"
+            if n == 0 && ssl_get_bytes_avail(ctx) == 0 &&
+               (bytesavailable(ctx.bio) > 0 || isreadable(ctx.bio))
+                # The transport is still open: `mbedtls_ssl_read` also returns 0 for the
+                # second of two empty application-data records in a row.
+                continue
+            end
             if n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY ||
                n == MBEDTLS_ERR_SSL_CONN_EOF ||
                n == 0
