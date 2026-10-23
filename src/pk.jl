@@ -27,8 +27,6 @@ end
 
 Base.unsafe_convert(::Type{Ptr{Cvoid}}, ctx::PKContext) = ctx.data
 
-const MBEDTLSLOCK = ReentrantLock()
-
 # `String(::Vector{UInt8})` takes the vector's memory and empties it; copy the caller's bytes.
 as_string(x) = x isa Vector{UInt8} ? String(copy(x)) : String(x)
 
@@ -148,7 +146,7 @@ end
 
 function verify(ctx::PKContext, hash_alg::MDKind, hash, signature)
     check_hash_size(hash_alg, hash)
-    @err_check ccall((:mbedtls_pk_verify, libmbedcrypto), Cint,
+    Base.@lock MBEDTLSLOCK @err_check ccall((:mbedtls_pk_verify, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t),
         ctx, hash_alg, hash, sizeof(hash), signature, sizeof(signature))
 end

@@ -18,10 +18,6 @@ mutable struct SSLConfig
     # One reference held by the config itself, plus one per `SSLContext` set up with it.
     # `mbedtls_ssl_free` reads the config, so `data` is freed only once all are released.
     refs::Threads.Atomic{Int}
-    # MbedTLS_jll is built without `MBEDTLS_THREADING_C`, and handshakes share this config's
-    # keys and CA chain: `mbedtls_rsa_private` updates an RSA key's blinding values, and
-    # public-key operations cache values in the key. So handshakes on one config take turns.
-    handshake_lock::ReentrantLock
     # Whether peers may renegotiate, which runs handshake steps inside reads and writes.
     renegotiation::Bool
 
@@ -30,7 +26,6 @@ mutable struct SSLConfig
         conf.data = Libc.malloc(1000)  # 360
         conf.refs = Threads.Atomic{Int}(1)
         conf.own_certs = Any[]
-        conf.handshake_lock = ReentrantLock()
         conf.renegotiation = false
         ccall((:mbedtls_ssl_config_init, libmbedtls), Cvoid, (Ptr{Cvoid},), conf.data)
         ccall((:mbedtls_ssl_conf_verify, libmbedtls), Cvoid,
@@ -772,14 +767,14 @@ function ssl_setup(ctx::SSLContext, conf::SSLConfig)
 end
 
 # With renegotiation enabled, `mbedtls_ssl_read` and `mbedtls_ssl_write` can run handshake
-# steps, which use the config's keys as `ssl_handshake` does.
+# steps, which use keys as `ssl_handshake` does.
 renegotiation_lock(ctx::SSLContext) =
-    isdefined(ctx, :config) && ctx.config.renegotiation ? ctx.config.handshake_lock : nothing
+    isdefined(ctx, :config) && ctx.config.renegotiation ? MBEDTLSLOCK : nothing
 
 function ssl_handshake(ctx::SSLContext)
     # Records are written to the socket after this, in `flush_pending`, so the lock is held
     # only for the computation.
-    n = Base.@lock ctx.config.handshake_lock @lockdata ctx begin
+    n = Base.@lock MBEDTLSLOCK @lockdata ctx begin
         ccall((:mbedtls_ssl_handshake, libmbedtls), Cint,
               (Ptr{Cvoid},), ctx.data)
     end
