@@ -39,6 +39,13 @@ import Base: show
 
 const MBED_SUCCESS = Cint(0)
 
+# MbedTLS_jll is built without `MBEDTLS_THREADING_C`, so keys and certificates have no locks,
+# yet using them changes them: RSA blinding values, cached public-key values. Many configs,
+# and `sign`/`decrypt!`/..., can share a key or CA chain, so every operation with one,
+# including each handshake step, holds this lock.
+# ponytail: one process-wide lock; per-key locks if parallel handshakes ever matter.
+const MBEDTLSLOCK = ReentrantLock()
+
 include("constants.jl")
 include("error.jl")
 include("md.jl")

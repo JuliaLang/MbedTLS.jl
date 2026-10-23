@@ -136,7 +136,7 @@ function verify(ctx::RSA, hash_alg::MDKind, hash, signature, rng = nothing; usin
     check_hash_size(hash_alg, hash)
     check_rsa_buffers(ctx, signature)
     # All errors, including validation errors throw
-    @err_check ccall((:mbedtls_rsa_pkcs1_verify, libmbedcrypto), Cint,
+    Base.@lock MBEDTLSLOCK @err_check ccall((:mbedtls_rsa_pkcs1_verify, libmbedcrypto), Cint,
         (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Any, Cint, Cint, Cuint, Ptr{UInt8}, Ptr{UInt8}),
         ctx,
         rng == nothing ? C_NULL : c_rng[],
@@ -160,14 +160,14 @@ end
 
 function public(ctx::RSA, input, output)
     check_rsa_buffers(ctx, input, output)
-    @err_check ccall((:mbedtls_rsa_public, libmbedcrypto), Cint,
+    Base.@lock MBEDTLSLOCK @err_check ccall((:mbedtls_rsa_public, libmbedcrypto), Cint,
         (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Ptr{Cvoid}), ctx, input, output)
     output
 end
 
 function private(ctx::RSA, f_rng, rng, input, output)
     check_rsa_buffers(ctx, input, output)
-    @err_check ccall((:mbedtls_rsa_private, libmbedcrypto), Cint,
+    Base.@lock MBEDTLSLOCK @err_check ccall((:mbedtls_rsa_private, libmbedcrypto), Cint,
         (Ptr{mbedtls_rsa_context}, Ptr{Cvoid}, Any, Ptr{Cvoid}, Ptr{Cvoid}),
         ctx, f_rng, rng, input, output)
     output
