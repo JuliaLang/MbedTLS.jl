@@ -209,11 +209,20 @@ function get_key_bitlen(cipher::Cipher)
     info === nothing ? 0 : Int(info.key_bitlen)
 end
 
+# The leading fields of `mbedtls_cipher_context_t`.
+struct CipherContextHead
+    cipher_info::Ptr{CipherInfoHead}
+    key_bitlen::Cint
+    operation::Cint
+end
+
 # `mbedtls_cipher_update`, `_finish` and `_crypt` take no output size. Only CBC writes more
-# than its input: a block it held back, or the final padded block.
-function check_output_size(cipher::Cipher, buf_out, ilen)
+# than its input: a block it held back, or the final padded block. Decrypting a `whole`
+# message (`mbedtls_cipher_crypt`) writes at most its input.
+function check_output_size(cipher::Cipher, buf_out, ilen; whole::Bool=false)
     info = cipher_info_head(cipher)
-    cbc = info !== nothing && info.mode == Cint(CIPHER_MODE_CBC)
+    cbc = info !== nothing && info.mode == Cint(CIPHER_MODE_CBC) &&
+        !(whole && unsafe_load(Ptr{CipherContextHead}(cipher.data)).operation == Cint(DECRYPT))
     n = ilen + (cbc ? Int(info.block_size) : 0)
     buf_out isa Ptr || sizeof(buf_out) >= n ||
         throw(ArgumentError("`buf_out` needs at least $n bytes, not $(sizeof(buf_out))"))
@@ -297,7 +306,7 @@ function crypt!(cipher::Cipher, iv, buf_in, buf_out)
     olen_ref = Ref{Csize_t}(sizeof(buf_out))
     iv_b, iv_size = process_iv(iv, cipher)
     buf_in_b = tobytes(buf_in)
-    check_output_size(cipher, buf_out, sizeof(buf_in_b))
+    check_output_size(cipher, buf_out, sizeof(buf_in_b); whole=true)
     @err_check ccall((:mbedtls_cipher_crypt, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ptr{Csize_t}),
         cipher.data, iv_b, iv_size, buf_in_b, sizeof(buf_in_b),

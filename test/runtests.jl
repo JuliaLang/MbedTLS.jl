@@ -38,6 +38,12 @@ let
     out = zeros(UInt8, 64)
     n = MbedTLS.crypt!(cipher, message, out)
     @test out[1:n] == encrypt(CIPHER_AES, secret_key, message)
+    # Decrypting a whole message into a buffer the size of its ciphertext works.
+    decipher = Cipher(MbedTLS.CIPHER_AES_256_CBC)
+    MbedTLS.set_key!(decipher, secret_key, MbedTLS.DECRYPT)
+    plain = zeros(UInt8, length(cipher_text))
+    n = MbedTLS.crypt!(decipher, iv, cipher_text, plain)
+    @test String(plain[1:n]) == message
 
     # Output buffers must fit what Mbed TLS writes: in CBC mode, up to one extra block.
     MbedTLS.set_iv!(cipher, iv)
@@ -508,8 +514,9 @@ let crt = MbedTLS.crt_parse_file(joinpath(@__DIR__, "many_sans.pem"))
     info = sprint(show, crt)
     @test length(info) > 1000
     @test occursin("host60.many-sans.test", info)
-    # A CRT with no certificate has no info; this fails rather than growing the buffer forever.
-    @test_throws MbedTLS.MbedException sprint(show, MbedTLS.CRT())
+    # A CRT with no certificate has no info.
+    @test sprint(show, MbedTLS.CRT()) == "MbedTLS.CRT()"
+    @test_throws ArgumentError MbedTLS.crt_info(MbedTLS.CRT())
 end
 
 # Unit test for MBedTLS errorshow (#274)
