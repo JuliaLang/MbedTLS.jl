@@ -39,6 +39,6 @@ crt_parse_file(path) = crt_parse(String(read(path)))
 
 function crt_parse(buf)
     crt = CRT()
-    crt_parse!(crt, String(buf))
+    crt_parse!(crt, as_string(buf))
     crt
 end

@@ -29,6 +29,9 @@ Base.unsafe_convert(::Type{Ptr{Cvoid}}, ctx::PKContext) = ctx.data
 
 const MBEDTLSLOCK = ReentrantLock()
 
+# `String(::Vector{UInt8})` takes the vector's memory and empties it; copy the caller's bytes.
+as_string(x) = x isa Vector{UInt8} ? String(copy(x)) : String(x)
+
 function parse_keyfile!(ctx::PKContext, path, password=C_NULL)
     @err_check ccall((:mbedtls_pk_parse_keyfile, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cstring, Cstring),
@@ -54,7 +57,7 @@ function parse_public_keyfile(path)
 end
 
 function parse_public_key!(ctx::PKContext, key)
-    key_bs = String(key)
+    key_bs = as_string(key)
     @err_check ccall((:mbedtls_pk_parse_public_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cuchar}, Csize_t),
         ctx, key_bs, sizeof(key_bs) + 1)
@@ -67,13 +70,13 @@ function parse_public_key(key)
 end
 
 function parse_key!(ctx::PKContext, key, maybe_pw = nothing)
-    key_bs = String(key)
+    key_bs = as_string(key)
     if maybe_pw === nothing
         pw = C_NULL
         pw_size = 0
     else
-        pw = String(maybe_pw)
-        pw_size = sizeof(pw)  # Might be off-by-one
+        pw = as_string(maybe_pw)
+        pw_size = sizeof(pw)
     end
     @err_check ccall((:mbedtls_pk_parse_key, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Ptr{Cuchar}, Csize_t, Ptr{Cuchar}, Csize_t),
@@ -94,10 +97,10 @@ function bitlength(ctx::PKContext)
 end
 
 function decrypt!(ctx::PKContext, input, output, rng)
-    outlen_ref = Ref{Cint}(0)
+    outlen_ref = Ref{Csize_t}(0)
     Base.@lock MBEDTLSLOCK begin
         @err_check ccall((:mbedtls_pk_decrypt, libmbedcrypto), Cint,
-            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Cint}, Csize_t, Ptr{Cvoid}, Any),
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Csize_t}, Csize_t, Ptr{Cvoid}, Any),
             ctx, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng[], rng)
     end
     outlen = outlen_ref[]
@@ -105,17 +108,29 @@ function decrypt!(ctx::PKContext, input, output, rng)
 end
 
 function encrypt!(ctx::PKContext, input, output, rng)
-    outlen_ref = Ref{Cint}(0)
+    outlen_ref = Ref{Csize_t}(0)
     Base.@lock MBEDTLSLOCK begin
         @err_check ccall((:mbedtls_pk_encrypt, libmbedcrypto), Cint,
-            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Cint}, Csize_t, Ptr{Cvoid}, Any),
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t, Ptr{Cvoid}, Ref{Csize_t}, Csize_t, Ptr{Cvoid}, Any),
             ctx, input, sizeof(input), output, outlen_ref, sizeof(output), c_rng[], rng)
     end
     outlen = outlen_ref[]
     Int(outlen)
 end
 
+# The most bytes `mbedtls_pk_sign` can write for `ctx`; it takes no output size.
+function max_signature_size(ctx::PKContext)
+    bits = bitlength(ctx)
+    get_type(ctx) in (PK_ECKEY, PK_ECDSA) || return cld(bits, 8)
+    # `MBEDTLS_ECDSA_MAX_SIG_LEN(bits)`: a DER sequence of two integers
+    return (bits >= 61 * 8 ? 3 : 2) + 2 * ((bits >= 127 * 8 ? 3 : 2) + (bits + 8) ÷ 8)
+end
+
 function sign!(ctx::PKContext, hash_alg::MDKind, hash, output, rng)
+    check_hash_size(hash_alg, hash)
+    n = max_signature_size(ctx)
+    sizeof(output) >= n ||
+        throw(ArgumentError("signatures with this key need up to $n bytes; `output` has $(sizeof(output))"))
     outlen_ref = Ref{Csize_t}(sizeof(output))
     Base.@lock MBEDTLSLOCK begin
         @err_check ccall((:mbedtls_pk_sign, libmbedcrypto), Cint,
@@ -127,13 +142,12 @@ function sign!(ctx::PKContext, hash_alg::MDKind, hash, output, rng)
 end
 
 function sign(ctx::PKContext, hash_alg::MDKind, hash, rng)
-    n = Int64(ceil(bitlength(ctx) / 8))
-    output = Vector{UInt8}(undef, n)
-    @assert sign!(ctx, hash_alg, hash, output, rng) == n
-    output
+    output = Vector{UInt8}(undef, max_signature_size(ctx))
+    resize!(output, sign!(ctx, hash_alg, hash, output, rng))
 end
 
 function verify(ctx::PKContext, hash_alg::MDKind, hash, signature)
+    check_hash_size(hash_alg, hash)
     @err_check ccall((:mbedtls_pk_verify, libmbedcrypto), Cint,
         (Ptr{Cvoid}, Cint, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t),
         ctx, hash_alg, hash, sizeof(hash), signature, sizeof(signature))
