@@ -34,8 +34,12 @@ function jl_entropy(f, output, len, olen)
 end
 
 function add_source!(ctx::Entropy, f::Function, threshold, strong)
-    push!(ctx.sources, f)
-    add_source!(ctx, c_entropy[], f, threshold, strong ? 1 : 0)
+    Base.@lock ctx.lock begin
+        push!(ctx.sources, f)
+        # Pass the stored object: mbedtls keeps this pointer, and passing `f` directly can hand
+        # it a temporary box (for a closure, say) that nothing keeps alive.
+        add_source!(ctx, c_entropy[], ctx.sources[end], threshold, strong ? 1 : 0)
+    end
 end
 
 const c_entropy = Ref{Ptr{Cvoid}}(C_NULL)

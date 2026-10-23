@@ -28,6 +28,18 @@ using Test, MbedTLS, Random, Sockets
     end
     @test allunique(reduce(vcat, firsts))
 
+    # Sources added to one `Entropy` from several threads are all kept.
+    kept = map(1:200) do _
+        entropy = MbedTLS.Entropy()
+        @sync for _ in 1:Threads.nthreads()
+            Threads.@spawn for _ in 1:4
+                MbedTLS.add_source!(entropy, buf -> 0, 0, false)
+            end
+        end
+        length(entropy.sources)
+    end
+    @test all(==(4 * Threads.nthreads()), kept)
+
     # Handshakes on several threads share an RSA key, through one config or two, while
     # another thread signs with it.
     certfile = joinpath(@__DIR__, "clntsrvr", "test.cert")

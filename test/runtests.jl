@@ -131,6 +131,49 @@ let
     verify_key_pem("MbedTLS.jl", signature)
 end
 
+# mbedtls keeps pointers to entropy sources and RNGs; they must survive a GC even when
+# they are closures or immutable structs.
+struct WrappedRNG <: AbstractRNG
+    inner::MbedTLS.CtrDrbg
+end
+Random.rand!(r::WrappedRNG, buf::Array{UInt8}) = rand!(r.inner, buf)
+
+let entropy = MbedTLS.Entropy(), calls = zeros(Int, 8)
+    add_counting_source!(k) = MbedTLS.add_source!(entropy, buf -> (calls[k] += 1; 0), 0, false)
+    foreach(add_counting_source!, 1:8)
+    inner = MbedTLS.CtrDrbg()
+    MbedTLS.seed!(inner, MbedTLS.Entropy())
+    clntconfig = MbedTLS.SSLConfig()
+    MbedTLS.config_defaults!(clntconfig)
+    MbedTLS.authmode!(clntconfig, MbedTLS.MBEDTLS_SSL_VERIFY_NONE)
+    MbedTLS.rng!(clntconfig, WrappedRNG(inner))
+    for _ in 1:3
+        garbage = [Ref(i) for i in 1:100_000]
+        GC.gc()
+    end
+    MbedTLS.gather(entropy)
+    @test calls == ones(Int, 8)
+
+    certfile = joinpath(@__DIR__, "clntsrvr", "test.cert")
+    keyfile = joinpath(@__DIR__, "clntsrvr", "test.key")
+    port, server = Sockets.listenany(8000)
+    t = @async begin
+        srvr = MbedTLS.SSLContext()
+        MbedTLS.setup!(srvr, MbedTLS.SSLConfig(certfile, keyfile))
+        MbedTLS.associate!(srvr, Sockets.accept(server))
+        MbedTLS.handshake!(srvr)
+        srvr
+    end
+    clnt = MbedTLS.SSLContext()
+    MbedTLS.setup!(clnt, clntconfig)
+    MbedTLS.set_bio!(clnt, connect(port))
+    MbedTLS.handshake!(clnt)
+    @test MbedTLS.get_version(clnt) == "TLSv1.2"
+    close(fetch(t))
+    close(clnt)
+    close(server)
+end
+
 # CtrDrbg
 let rng = MbedTLS.CtrDrbg()
     @test_throws ArgumentError rand(rng, 16)
