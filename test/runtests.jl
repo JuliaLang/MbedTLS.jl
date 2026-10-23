@@ -21,6 +21,22 @@ let
     plain_text = decrypt(CIPHER_AES, secret_key, cipher_text, iv)
 
     @test message == String(plain_text)
+
+    @test MbedTLS.CipherInfo(CIPHER_AES) isa MbedTLS.CipherInfo
+    @test encrypt(Cipher(CIPHER_AES), secret_key, message, iv) == cipher_text
+    @test encrypt(CIPHER_AES, secret_key, message, UInt8[]) == encrypt(CIPHER_AES, secret_key, message)
+
+    # The streaming API matches the one-shot `encrypt`.
+    cipher = Cipher(MbedTLS.CIPHER_AES_256_CBC)
+    MbedTLS.set_key!(cipher, secret_key, MbedTLS.ENCRYPT)
+    MbedTLS.set_iv!(cipher, iv)
+    head, tail = zeros(UInt8, 64), zeros(UInt8, 16)
+    n = MbedTLS.update!(cipher, message, head)
+    m = MbedTLS.finish!(cipher, tail)
+    @test [head[1:n]; tail[1:m]] == cipher_text
+    out = zeros(UInt8, 64)
+    n = MbedTLS.crypt!(cipher, message, out)
+    @test out[1:n] == encrypt(CIPHER_AES, secret_key, message)
 end
 
 # openssl rsa -inform PEM -text -noout < key.pem
