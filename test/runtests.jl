@@ -49,6 +49,10 @@ let
     @test MbedTLS.update!(ctr, message, zeros(UInt8, sizeof(message))) == sizeof(message)
     @test MbedTLS.finish!(ctr, UInt8[]) == 0
 
+    # Authenticated modes would skip their tag, so they're refused.
+    @test_throws ArgumentError encrypt(MbedTLS.CIPHER_AES_256_GCM, secret_key, message, iv)
+    @test_throws ArgumentError decrypt(MbedTLS.CIPHER_AES_256_GCM, secret_key, cipher_text, iv)
+
     @test MbedTLS.get_key_bitlen(cipher) == 256
     @test MbedTLS.get_key_bitlen(Cipher(MbedTLS.CIPHER_AES_128_CBC)) == 128
     @test endswith(sprint(show, cipher), ")")
